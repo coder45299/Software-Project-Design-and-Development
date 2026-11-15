@@ -1,0 +1,10 @@
+node_modules/
+tests/reports/
+tests/.cov/
+tests/e2e/axe-*.json
+.coverage*
+coverage/
+__pycache__/
+uploads/lost/*
+uploads/tmp/*
+!uploads/**/.gitkeep

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lost &amp; Found – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="lost">
+<div id="nav"></div>
+<div class="container">
+  <div class="page-head"><h1>📍 Lost &amp; found pets</h1><p class="muted" style="max-width:640px">Lost your pet? Upload a photo and where you last saw it. Found one on the street? Report it the same way. Our team compares every photo and connects the right people.</p></div>
+
+  <div class="tabs mt" id="lfTabs" style="max-width:560px">
+    <button class="tab active" data-tab="list">Recent reports</button>
+    <button class="tab" data-tab="lost">I lost my pet</button>
+    <button class="tab" data-tab="found">I found a pet</button>
+  </div>
+
+  <div id="paneList" class="mb">
+    <div class="flex wrap mb" id="typeFilter" style="gap:8px">
+      <button class="btn btn-sm btn-primary" data-f="">All</button>
+      <button class="btn btn-sm btn-ghost" data-f="lost">Lost</button>
+      <button class="btn btn-sm btn-ghost" data-f="found">Found</button>
+    </div>
+    <div class="grid g3" id="reports"></div>
+  </div>
+
+  <div id="paneForm" class="hidden mb">
+    <form id="lfForm" class="card" style="max-width:760px;padding:30px" novalidate>
+      <h3 class="mb" id="formTitle">I lost my pet</h3>
+      <div class="dropzone" id="dz"><div class="dz-ico">📷</div><b>Upload a clear photo of the pet</b><p class="muted" style="font-size:.85rem">Face and body visible, good light. JPG, PNG or WEBP, up to 5 MB.</p></div>
+      <input type="file" id="file" accept="image/jpeg,image/png,image/webp" hidden>
+      <div class="previews" id="prev" style="max-width:200px"></div>
+
+      <div id="lostOnly" class="mt">
+        <div class="row">
+          <div class="field"><label for="f1-pet_name">Pet name</label><input id="f1-pet_name" name="pet_name" maxlength="100" placeholder="e.g. Biscuit"></div>
+          <div class="field"><label for="petSel">Registered pet (optional)</label><select name="pet_id" id="petSel"><option value="">Not registered</option></select></div>
+        </div>
+        <p id="usePhotoWrap" class="hidden mb" style="margin-top:-6px"><button type="button" class="btn btn-ghost btn-sm" id="usePhoto">Use the registered photo</button></p>
+      </div>
+
+      <div class="row mt">
+        <div class="field"><label for="f3-species">Species</label><select id="f3-species" name="species"><option>Dog</option><option>Cat</option><option>Bird</option><option>Rabbit</option><option>Other</option></select></div>
+        <div class="field"><label id="dateLabel">Date lost</label><input type="date" name="found_date" required></div>
+      </div>
+      <div class="field"><label id="locLabel">Where was it last seen? *</label><input name="location" required maxlength="255" placeholder="Street, area, city"></div>
+      <div class="field"><label for="f4-description">Description</label><textarea id="f4-description" name="description" maxlength="2000" placeholder="Colour, collar, markings, behaviour, anything that helps identify the pet"></textarea></div>
+      <div class="field"><label for="f5-phone">Your phone number *</label><input id="f5-phone" name="phone" required placeholder="01XXXXXXXXX"></div>
+      <button class="btn btn-primary btn-block" id="submitBtn">Send lost report</button>
+      <p class="muted center mt" style="font-size:.82rem">Your phone number is shown only to our team and to the person we match you with.</p>
+    </form>
+  </div>
+</div>
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script src="ml-lite.js"></script>
+<script src="reports.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+let reports = [], typeFilter = '', mode = 'list';
+const up = setupDropzone($('#dz'), $('#file'), $('#prev'), { multiple: false });
+$('[name=found_date]').value = todayISO(); $('[name=found_date]').max = todayISO();
+
+function setMode(m) {
+  mode = m;
+  $$('#lfTabs .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === m));
+  $('#paneList').classList.toggle('hidden', m !== 'list'); $('#paneForm').classList.toggle('hidden', m === 'list');
+  if (m === 'list') return;
+  const lost = m === 'lost';
+  $('#formTitle').textContent = lost ? 'I lost my pet' : 'I found a pet';
+  $('#lostOnly').classList.toggle('hidden', !lost);
+  $('#dateLabel').textContent = lost ? 'Date lost' : 'Date found';
+  $('#locLabel').textContent = lost ? 'Where was it last seen? *' : 'Where did you find it? *';
+  $('#submitBtn').textContent = lost ? 'Send lost report' : 'Send found report';
+}
+$$('#lfTabs .tab').forEach(b => b.onclick = () => setMode(b.dataset.tab));
+
+/* ---- list ---- */
+function card(r) {
+  const [st, stc] = STATUS_LABEL[r.status] || STATUS_LABEL.open, u = getUser();
+  const mine = !!u && (u.role === 'admin' || r.mine || (CONFIG.USE_DEMO && r.reporter_id == u.user_id));
+  return `<div class="card feature" style="padding:0;overflow:hidden">
+    <div class="pet-thumb" style="background:${grad(r.report_id + 2)};height:170px;overflow:hidden"><img src="${esc(r.image)}" alt="${esc(r.report_type)} ${esc(r.species)}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+      <span class="badge ${r.report_type === 'lost' ? 'b-danger' : 'b-info'}" style="position:absolute;top:12px;left:12px">${TYPE_LABEL[r.report_type]}</span></div>
+    <div style="padding:18px"><div class="flex between"><b>${esc(r.pet_name || r.species)}${r.pet_name ? ' <span class="muted" style="font-weight:400">(' + esc(r.species) + ')</span>' : ''}</b><span class="badge ${stc}">${st}</span></div>
+    <p class="muted" style="font-size:.86rem;margin:8px 0">${esc(r.description) || 'No description.'}</p>
+    <p style="font-size:.84rem">📍 ${esc(r.location)}<br>📅 ${fmtDate(r.found_date)}<br>👤 ${esc(r.reporter)}</p>
+    <div class="flex" style="margin-top:14px;gap:8px">
+      ${r.report_type === 'lost' ? `<a href="lost-found.html?tab=found&species=${r.species}" class="btn btn-ghost btn-sm" style="flex:1">I have seen this pet</a>` : `<a href="lost-found.html?tab=lost&species=${r.species}" class="btn btn-ghost btn-sm" style="flex:1">This is my pet</a>`}
+      ${mine ? `<button class="btn btn-ghost btn-sm" title="Delete report" aria-label="Delete report ${r.report_id}" onclick="del(${r.report_id})">🗑</button>` : ''}
+    </div></div></div>`;
+}
+function render() {
+  const rows = reports.filter(r => !typeFilter || r.report_type === typeFilter);
+  $('#reports').innerHTML = rows.map(card).join('') || '<div class="empty" style="grid-column:1/-1"><div class="em">🐾</div><p>No reports yet.</p><button class="btn btn-primary mt" onclick="setMode(\'lost\')">Report a lost pet</button></div>';
+  $$('#typeFilter button').forEach(b => { const on = b.dataset.f === typeFilter; b.classList.toggle('btn-primary', on); b.classList.toggle('btn-ghost', !on); });
+}
+$$('#typeFilter button').forEach(b => b.onclick = () => { typeFilter = b.dataset.f; render(); });
+window.del = async id => {
+  if (!confirm('Delete this report?')) return;
+  try { await Reports.remove({ report_id: id }); reports = reports.filter(r => r.report_id !== id); render(); toast('Report deleted'); } catch (e) { toast(e.message, 'err'); }
+};
+
+/* ---- my registered pets (lost form) ---- */
+let myPetList = [];
+async function loadMyPets() {
+  const u = getUser(); if (!u) return;
+  try { const res = await api('/pets/mine'); myPetList = res ? res.data : Data.pets().filter(p => p.owner_id == 1 || p.owner_id == u.user_id); } catch (e) { myPetList = []; }
+  $('#petSel').innerHTML = '<option value="">Not registered</option>' + myPetList.map(p => `<option value="${p.pet_id}">${esc(p.name)} (${p.species})</option>`).join('');
+  $('[name=phone]').value = u.phone || '';
+}
+$('#petSel').onchange = e => {
+  const p = myPetList.find(x => x.pet_id == e.target.value), f = $('#lfForm');
+  $('#usePhotoWrap').classList.toggle('hidden', !(p && petImgs(p).length));
+  if (p) { f.elements.pet_name.value = p.name; f.elements.species.value = p.species; }
+};
+$('#usePhoto').onclick = async () => {
+  const p = myPetList.find(x => x.pet_id == $('#petSel').value); if (!p) return;
+  try { const blob = await (await fetch(petImgs(p)[0])).blob(); up.add([new File([blob], p.name + '.jpg', { type: blob.type || 'image/jpeg' })]); toast('Registered photo added', 'ok'); }
+  catch (e) { toast('Could not load that photo. Upload one instead.', 'err'); }
+};
+
+/* ---- submit ---- */
+$('#lfForm').onsubmit = async e => {
+  e.preventDefault();
+  if (!requireLogin()) return;
+  const f = e.target, file = up.files()[0];
+  if (!file) return toast('Please upload a photo of the pet', 'err');
+  if (file.size > 5 * 1048576) return toast('That photo is larger than 5 MB. Choose a smaller one.', 'err');
+  if (!f.location.value.trim()) return toast('Enter the location', 'err');
+  if (!/^[0-9+\-\s]{6,20}$/.test(f.phone.value.trim())) return toast('Enter a valid phone number', 'err');
+  const btn = $('#submitBtn'), label = btn.textContent; btn.disabled = true; btn.textContent = 'Comparing photo…';
+  try {
+    const r = await Reports.create({ report_type: mode, pet_name: mode === 'lost' ? f.pet_name.value.trim() : '', pet_id: mode === 'lost' ? f.pet_id.value : '',
+      species: f.species.value, found_date: f.found_date.value, location: f.location.value.trim(), description: f.description.value.trim(), phone: f.phone.value.trim() }, file);
+    reports.unshift(r); render(); f.reset(); up.clear(); $('[name=found_date]').value = todayISO();
+    toast(r.ml_error ? 'Report sent. Photo matching is off in this browser: ' + r.ml_error : `Report #${r.report_id} sent. Our team will compare the photo and contact you.`, r.ml_error ? '' : 'ok');
+    setMode('list'); typeFilter = ''; render();
+  } catch (err) { toast(err.message, 'err'); }
+  finally { btn.disabled = false; btn.textContent = label; }
+};
+
+(async () => {
+  try { reports = await Reports.list(); } catch (e) { toast(e.message, 'err'); }
+  render(); await loadMyPets();
+  const t = params.get('tab'); if (t === 'lost' || t === 'found') setMode(t);
+  if (params.get('species')) $('[name=species]').value = params.get('species');
+  if (params.get('pet') && t === 'lost') { $('#petSel').value = params.get('pet'); $('#petSel').onchange({ target: $('#petSel') }); }
+})();
+</script>
+</body>
+</html>

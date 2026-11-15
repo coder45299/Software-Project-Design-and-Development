@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Add / Edit Pet – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="dashboard">
+<div id="nav"></div>
+<div class="container" style="max-width:900px">
+  <div class="page-head"><a href="dashboard.html" class="muted">← Back to dashboard</a><h1 id="title" style="margin-top:8px">Add a new pet</h1><p class="muted">Clear photos help our biometric matching work better.</p></div>
+  <form id="petForm" class="card mb" style="padding:30px">
+    <h3 class="mb">📸 Photos</h3>
+    <div class="dropzone" id="dz"><div class="dz-ico">📷</div><b>Click or drag &amp; drop photos here</b><p class="muted" style="font-size:.85rem">Up to 6 images. Include a front face and a close-up of the nose.</p></div>
+    <input type="file" id="file" accept="image/*" multiple hidden>
+    <div class="previews" id="prev"></div>
+
+    <h3 style="margin:30px 0 16px">🐾 Pet information</h3>
+    <div class="row">
+      <div class="field"><label for="f1-name">Pet name *</label><input id="f1-name" name="name" required placeholder="e.g. Bruno"></div>
+      <div class="field"><label for="f2-species">Species *</label><select id="f2-species" name="species" required><option>Dog</option><option>Cat</option><option>Bird</option><option>Rabbit</option><option>Other</option></select></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="f3-breed">Breed</label><input id="f3-breed" name="breed" placeholder="e.g. Labrador"></div>
+      <div class="field"><label for="f4-color">Color</label><input id="f4-color" name="color" placeholder="e.g. Golden"></div>
+    </div>
+    <div class="row3 row">
+      <div class="field"><label for="f5-age">Age (years)</label><input id="f5-age" type="number" name="age" min="0" max="40" step="0.5" value="1"></div>
+      <div class="field"><label for="f6-gender">Gender</label><select id="f6-gender" name="gender"><option>Male</option><option>Female</option></select></div>
+      <div class="field"><label for="f7-status">Status</label><select id="f7-status" name="status"><option value="owned">With owner</option><option value="adoption">Available for adoption</option><option value="lost">Lost</option></select></div>
+    </div>
+    <div class="field"><label for="f8-location">Location</label><input id="f8-location" name="location" placeholder="City / area"></div>
+    <div class="field"><label for="f9-description">Description</label><textarea id="f9-description" name="description" placeholder="Personality, health, habits, special marks..."></textarea></div>
+    <div class="flex" style="justify-content:flex-end"><a href="dashboard.html" class="btn btn-ghost">Cancel</a><button class="btn btn-primary" id="saveBtn">Save pet</button></div>
+  </form>
+</div>
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script>
+if (requireLogin()) {
+  const up = setupDropzone($('#dz'), $('#file'), $('#prev'), { multiple: true, max: 6 });
+  const id = new URLSearchParams(location.search).get('id');
+  const form = $('#petForm');
+  if (id) {
+    const p = Data.pet(id);
+    if (p) { $('#title').textContent = 'Edit ' + p.name; Object.keys(p).forEach(k => { if (form.elements[k]) form.elements[k].value = p[k]; }); }
+  }
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(form));
+    delete data.file;
+    try {
+      if (!CONFIG.USE_DEMO) {
+        const fd = new FormData(); Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+        up.files().forEach(f => fd.append('images[]', f));
+        await api(id ? '/pets/' + id : '/pets', { method: 'POST', form: fd });
+      } else {
+        const pets = Data.pets(); let newId = id;
+        if (id) { const i = pets.findIndex(p => p.pet_id == id); pets[i] = { ...pets[i], ...data, age: +data.age }; }
+        else { const nid = Math.max(0, ...pets.map(p => p.pet_id)) + 1; pets.push({ ...data, pet_id: nid, owner_id: getUser().user_id || 1, age: +data.age }); newId = nid; }
+        Data.savePets(pets);
+        if (up.files().length) { const m = Store.get('pimgs', {}); m[newId] = (await Promise.all(up.files().map(f => fileToDataURL(f)))).filter(Boolean); Store.set('pimgs', m); }
+      }
+      toast(id ? 'Pet updated!' : 'Pet added successfully!', 'ok');
+      setTimeout(() => location.href = 'dashboard.html', 800);
+    } catch (err) { toast(err.message, 'err'); }
+  };
+}
+</script>
+</body>
+</html>

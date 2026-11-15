@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pet Biometrics – Every Paw Has an Identity</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="home">
+<div id="nav"></div>
+
+<section class="hero">
+  <div class="container hero-grid">
+    <div>
+      <span class="tag">🔍 Smart pet identification</span>
+      <h1>Every paw has a <em>unique identity</em></h1>
+      <p class="lead">Register your pets, track their care, find homes for pets in need and reunite lost pets with their families using nose &amp; face biometric matching.</p>
+      <div class="hero-actions">
+        <a href="register.html" class="btn btn-primary">Get started free</a>
+        <a href="find-my-pet.html" class="btn btn-ghost">🔎 Find my pet</a>
+      </div>
+      <div class="hero-stats">
+        <div><b>2,400+</b><span>Pets registered</span></div>
+        <div><b>860</b><span>Happy adoptions</span></div>
+        <div><b>310</b><span>Pets reunited</span></div>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="hv-card hv-main" style="background:url(photos/site/hero.jpg) center/cover;overflow:hidden"><div class="hv-scan"></div></div>
+      <div class="hv-card hv-a"><div class="score-ring">96%</div><div><b>Match found!</b><br><small class="muted">Bruno • Dhaka</small></div></div>
+      <div class="hv-card hv-b">💉 <b>Vaccine due</b><br><small class="muted">in 3 days</small></div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt">
+  <div class="container">
+    <div class="section-head"><span class="eyebrow">Features</span><h2>Everything your pet needs, in one place</h2><p class="muted">From daily care reminders to finding a lost friend, we have you covered.</p></div>
+    <div class="grid g3">
+      <div class="card feature"><div class="f-icon" style="background:#ccfbf1">🐶</div><h3>Pet Profiles</h3><p>Create detailed profiles with multiple photos, breed, age and health notes for each of your pets.</p></div>
+      <div class="card feature"><div class="f-icon" style="background:#fee2e2">🔎</div><h3>Find My Pet</h3><p>Upload a photo and our biometric matching compares nose and face patterns to find your pet.</p></div>
+      <div class="card feature"><div class="f-icon" style="background:#dbeafe">💉</div><h3>Care Tracker</h3><p>Log vaccinations, deworming, vet visits and grooming. Never miss an important date again.</p></div>
+      <div class="card feature"><div class="f-icon" style="background:#ffedd5">🏠</div><h3>Adoption Hub</h3><p>Browse adoptable pets, filter by species, age and location, and send adoption requests easily.</p></div>
+      <div class="card feature"><div class="f-icon" style="background:#fef3c7">📍</div><h3>Lost &amp; Found</h3><p>Found a stray? Report it with a photo and location and we will try to match it to its owner.</p></div>
+      <div class="card feature"><div class="f-icon" style="background:#ede9fe">🔔</div><h3>Smart Alerts</h3><p>Get instant notifications about matches, adoption requests and upcoming care reminders.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head"><span class="eyebrow">How it works</span><h2>Three simple steps</h2></div>
+    <div class="grid g3 steps">
+      <div class="step"><h3>Register your pet</h3><p class="muted">Add photos from different angles, especially a clear close-up of the nose and face.</p></div>
+      <div class="step"><h3>We build a biometric profile</h3><p class="muted">Distinctive features are extracted and stored securely to identify your pet later.</p></div>
+      <div class="step"><h3>Match &amp; reunite</h3><p class="muted">If a pet is lost or found, upload a photo and see the closest matches instantly.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt">
+  <div class="container">
+    <div class="flex between wrap mb">
+      <div><span class="eyebrow">Adoption</span><h2 style="font-size:2rem">Latest pets looking for a home</h2></div>
+      <a href="adoption.html" class="btn btn-ghost">View all pets →</a>
+    </div>
+    <div class="grid g4" id="latest"></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container"><div class="cta">
+    <h2 style="font-size:2.2rem;margin-bottom:12px">Ready to protect your best friend?</h2>
+    <p style="opacity:.9;margin-bottom:26px">Join thousands of pet lovers building a safer world for pets.</p>
+    <a href="register.html" class="btn btn-accent">Create free account</a>
+  </div></div>
+</section>
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script>
+(async () => {
+  let pets = await api('/pets?status=adoption&limit=4');
+  pets = (pets && pets.data) || Data.pets().filter(p => p.status === 'adoption').slice(0, 4);
+  $('#latest').innerHTML = pets.map(petCard).join('');
+})();
+</script>
+</body>
+</html>

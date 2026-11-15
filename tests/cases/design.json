@@ -1,0 +1,266 @@
+{
+ "_README": "TEST DESIGN TABLES. Every row here is executed by the test suites. The rows marked designed_by 'AI draft' were written by the AI assistant as a starting point; the students must review each one against the requirement, then change the values or add rows and set designed_by to their own name. Expected values must come from the requirement (SRS / FR-xx), NOT from running the code.",
+ "date_boundaries": {
+  "requirement": "FR-CARE-2 / NFR-DATE: a care reminder is OVERDUE if its due date is before today, DUE SOON if 0..14 days away, otherwise UPCOMING. 'Today' is the visitor's calendar day.",
+  "technique": "Boundary value analysis on days-until-due",
+  "rows": [
+   {
+    "id": "DB-01",
+    "now": "2026-11-11T09:00:00",
+    "due": "2026-11-09",
+    "days": -2,
+    "bucket": "overdue",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "DB-02",
+    "now": "2026-11-11T09:00:00",
+    "due": "2026-11-10",
+    "days": -1,
+    "bucket": "overdue",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "DB-03",
+    "now": "2026-11-11T09:00:00",
+    "due": "2026-11-11",
+    "days": 0,
+    "bucket": "soon",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "DB-04",
+    "now": "2026-11-11T23:59:00",
+    "due": "2026-11-12",
+    "days": 1,
+    "bucket": "soon",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "DB-05",
+    "now": "2026-11-11T00:00:00",
+    "due": "2026-11-25",
+    "days": 14,
+    "bucket": "soon",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "DB-06",
+    "now": "2026-11-11T12:00:00",
+    "due": "2026-11-26",
+    "days": 15,
+    "bucket": "upcoming",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "DB-07",
+    "now": "2028-02-28T10:00:00",
+    "due": "2028-03-01",
+    "days": 2,
+    "bucket": "soon",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "DB-08",
+    "now": "2026-12-31T22:00:00",
+    "due": "2027-01-01",
+    "days": 1,
+    "bucket": "soon",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "DB-09",
+    "now": "2030-05-05T08:00:00",
+    "due": "2030-05-03",
+    "days": -2,
+    "bucket": "overdue",
+    "designed_by": "AI draft - student to review (a date years after the code was written)"
+   }
+  ]
+ },
+ "register": {
+  "requirement": "FR-AUTH-1: name required; valid e-mail; password >= 8 characters; phone optional but 6-20 chars of digits, +, - or space; e-mail unique.",
+  "technique": "Equivalence partitioning + boundary value analysis",
+  "rows": [
+   {
+    "id": "RG-01",
+    "name": "Ok User",
+    "password": "abcdefgh",
+    "phone": "",
+    "http": 201,
+    "why": "password at lower boundary (8)",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "RG-02",
+    "name": "Ok User",
+    "password": "abcdefg",
+    "phone": "",
+    "http": 400,
+    "why": "password just below boundary (7)",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "RG-03",
+    "name": "Ok User",
+    "password": "abcdefgh",
+    "phone": "12345",
+    "http": 400,
+    "why": "phone 5 chars, below boundary",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "RG-04",
+    "name": "Ok User",
+    "password": "abcdefgh",
+    "phone": "123456",
+    "http": 201,
+    "why": "phone 6 chars, lower boundary",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "RG-05",
+    "name": "Ok User",
+    "password": "abcdefgh",
+    "phone": "12345678901234567890",
+    "http": 201,
+    "why": "phone 20 chars, upper boundary",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "RG-06",
+    "name": "Ok User",
+    "password": "abcdefgh",
+    "phone": "123456789012345678901",
+    "http": 400,
+    "why": "phone 21 chars, above boundary",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "RG-07",
+    "name": "Ok User",
+    "password": "abcdefgh",
+    "phone": "01700-abc",
+    "http": 400,
+    "why": "letters in phone (invalid class)",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "RG-08",
+    "name": "",
+    "password": "abcdefgh",
+    "phone": "",
+    "http": 400,
+    "why": "empty name",
+    "designed_by": "AI draft - student to review"
+   }
+  ],
+  "bad_emails": [
+   "no-at-sign",
+   "a@",
+   "@b.com",
+   "a b@c.com",
+   ""
+  ]
+ },
+ "upload": {
+  "requirement": "FR-LOST-1: only JPG/PNG/WEBP images up to 5 MB are accepted.",
+  "technique": "Equivalence partitioning on file type, boundary on size",
+  "rows": [
+   {
+    "id": "UP-01",
+    "kind": "jpeg",
+    "bytes": 0,
+    "http": 201,
+    "why": "valid JPEG",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "UP-02",
+    "kind": "text",
+    "bytes": 0,
+    "http": 415,
+    "why": "text file renamed .jpg",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "UP-03",
+    "kind": "pdf",
+    "bytes": 0,
+    "http": 415,
+    "why": "PDF is not an image",
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "UP-04",
+    "kind": "jpeg",
+    "bytes": 5242881,
+    "http": 413,
+    "why": "one byte over 5 MB",
+    "designed_by": "AI draft - student to review"
+   }
+  ]
+ },
+ "access_control": {
+  "requirement": "NFR-SEC-1: every /admin route needs an admin session; every /care and /notifications route needs a login.",
+  "technique": "Decision table: (logged in?, role) -> allowed?",
+  "rows": [
+   {
+    "id": "AC-01",
+    "route": "/admin/users",
+    "as": "guest",
+    "http": 401,
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "AC-02",
+    "route": "/admin/users",
+    "as": "user",
+    "http": 403,
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "AC-03",
+    "route": "/admin/users",
+    "as": "admin",
+    "http": 200,
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "AC-04",
+    "route": "/admin/pets",
+    "as": "user",
+    "http": 403,
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "AC-05",
+    "route": "/admin/reports",
+    "as": "user",
+    "http": 403,
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "AC-06",
+    "route": "/care/upcoming",
+    "as": "guest",
+    "http": 401,
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "AC-07",
+    "route": "/notifications",
+    "as": "guest",
+    "http": 401,
+    "designed_by": "AI draft - student to review"
+   },
+   {
+    "id": "AC-08",
+    "route": "/notifications",
+    "as": "user",
+    "http": 200,
+    "designed_by": "AI draft - student to review"
+   }
+  ]
+ }
+}

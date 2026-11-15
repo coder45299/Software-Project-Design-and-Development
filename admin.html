@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Panel – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+<style>
+ .rc-photo{height:190px;position:relative;background:#e2e8f0;overflow:hidden}.rc-photo img{width:100%;height:100%;object-fit:cover}
+ .rc-photo .badge{position:absolute;top:12px;left:12px}
+ .console{width:min(1040px,100%)}
+ .con-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:26px}
+ .con-photo{width:100%;max-height:320px;object-fit:contain;background:#0f172a;border-radius:16px}
+ .cand{display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:center;width:100%;text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:8px;margin-bottom:8px;cursor:pointer;font:inherit;color:inherit}
+ .cand:hover{border-color:var(--primary)}.cand[aria-pressed=true]{border-color:var(--ok);background:#f0fdf4}
+ .cand img{width:64px;height:64px;object-fit:cover;border-radius:10px}
+ .swipe{position:relative;height:260px;border-radius:16px;overflow:hidden;background:#0f172a;user-select:none}
+ .swipe img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+ .swipe .top{clip-path:inset(0 var(--cut,50%) 0 0)}
+ .swipe .tag{position:absolute;bottom:10px;background:rgba(15,23,42,.8);color:#fff;font-size:.72rem;padding:3px 10px;border-radius:99px}
+ .swipe .bar{position:absolute;top:0;bottom:0;left:calc(100% - var(--cut,50%));width:2px;background:#fff;box-shadow:0 0 8px rgba(0,0,0,.5)}
+ .swipe input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize}
+ .swipe:focus-within{outline:3px solid #14b8a688}
+ @media(max-width:860px){.con-grid{grid-template-columns:1fr}}
+
+ .tools{display:flex;gap:10px;flex-wrap:wrap}.tools input,.tools select{width:auto;min-width:150px;padding:9px 14px;border-radius:99px}
+ .statbtn{border:1px solid var(--line);text-align:left;font:inherit;cursor:pointer;transition:.15s}.statbtn:hover{transform:translateY(-2px);border-color:var(--primary)}
+ .att{display:grid;grid-template-columns:36px 1fr auto;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}.att:last-child{border:0}.att span{font-size:1.4rem}.att small{display:block}
+ .acts{white-space:nowrap}.acts .btn{margin:2px 2px 2px 0}tr.dim td{opacity:.55}tr.dim td.acts{opacity:1}
+ .pthumb{width:48px;height:48px;object-fit:cover;border-radius:12px;background:#e2e8f0;display:block}
+ .stsel{width:auto;padding:6px 10px;border-radius:99px;font-weight:600;font-size:.85rem}.stsel.lost{color:#b91c1c;border-color:#fecaca;background:#fff1f2}.stsel.adoption{color:#15803d;border-color:#bbf7d0;background:#f0fdf4}
+ .nb{position:static;margin-left:auto}
+
+ #stats{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+</style>
+</head>
+<body data-page="admin">
+<div id="nav"></div>
+<div class="container" id="denied" style="display:none"><div class="empty" style="padding:100px 0"><div class="em">🔒</div><h2>Admin access only</h2><p>This area is for staff. Sign in with an admin account.</p><a href="admin-login.html" class="btn btn-primary mt">Admin sign in</a></div></div>
+
+<div class="container layout" id="panel" style="display:none">
+  <aside class="card side" id="adminSide">
+    <div class="user-mini"><div class="avatar">A</div><b>Admin Panel</b><br><small class="muted">Full control</small></div>
+    <a href="#" data-s="overview" class="active">📊 Overview</a>
+    <a href="#" data-s="reports">📍 Lost/Found reports <span class="bell-count nb" id="nbReports" hidden></span></a>
+    <a href="#" data-s="users">👥 Users</a>
+    <a href="#" data-s="pets">🐾 Pets</a>
+    <a href="#" data-s="requests">💌 Adoption requests <span class="bell-count nb" id="nbReqs" hidden></span></a>
+    <a href="#" data-s="announce">📣 Announcements</a>
+  </aside>
+  <main>
+    <section data-sec="overview">
+      <h1 class="mb">Overview</h1>
+      <div class="grid g4 mb" id="stats"></div>
+      <div class="grid g2">
+        <div class="card"><h3 class="mb">Needs your attention</h3><div id="attention"></div></div>
+        <div class="card"><h3 class="mb">Pets by species</h3><div id="species"></div><h3 class="mb" style="margin-top:22px">Reports by status</h3><div id="repStatus"></div></div>
+      </div>
+    </section>
+
+    <section data-sec="reports" class="hidden"><div class="flex between wrap mb"><h1>Lost / Found reports</h1>
+      <div class="flex wrap" id="repFilter" style="gap:8px"><button class="btn btn-sm btn-primary" data-f="">All</button><button class="btn btn-sm btn-ghost" data-f="lost">Lost</button><button class="btn btn-sm btn-ghost" data-f="found">Found</button><button class="btn btn-sm btn-ghost" data-f="open">Needs review</button></div></div>
+      <div class="grid g3" id="lRows"></div></section>
+
+    <section data-sec="users" class="hidden"><div class="flex between wrap mb"><h1>Users</h1>
+      <div class="tools"><input type="search" id="uQ" placeholder="Search name, email, phone" aria-label="Search users"><select id="uRole" aria-label="Filter by role"><option value="">All roles</option><option value="user">Users</option><option value="admin">Admins</option></select></div></div>
+      <div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Pets</th><th>Role</th><th>Account</th><th>Actions</th></tr></thead><tbody id="uRows"></tbody></table></div></section>
+
+    <section data-sec="pets" class="hidden"><div class="flex between wrap mb"><h1>Pets</h1>
+      <div class="tools"><input type="search" id="pQ" placeholder="Search name, breed, owner" aria-label="Search pets"><select id="pSp" aria-label="Species"><option value="">All species</option><option>Dog</option><option>Cat</option><option>Bird</option></select><select id="pSt" aria-label="Status"><option value="">Any status</option><option value="owned">With owner</option><option value="adoption">For adoption</option><option value="lost">Lost</option><option value="adopted">Adopted</option></select></div></div>
+      <div class="table-wrap"><table><thead><tr><th></th><th>Pet</th><th>Owner</th><th>Breed</th><th>Age</th><th>Status</th><th>Actions</th></tr></thead><tbody id="pRows"></tbody></table></div></section>
+
+    <section data-sec="requests" class="hidden"><div class="flex between wrap mb"><h1>Adoption requests</h1>
+      <div class="tools"><select id="rSt" aria-label="Status"><option value="">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Pet</th><th>Requester</th><th>Message</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody id="rRows"></tbody></table></div></section>
+
+    <section data-sec="announce" class="hidden"><h1 class="mb">Announcements</h1>
+      <form class="card" id="annForm" style="max-width:640px;padding:26px" novalidate>
+        <p class="muted mb">Send a notification to users. It shows up in their bell menu.</p>
+        <div class="field"><label for="annTo">Send to</label><select id="annTo"><option value="">All users</option></select></div>
+        <div class="field"><label for="annMsg">Message</label><textarea id="annMsg" maxlength="500" rows="4" placeholder="e.g. Please keep your phone number up to date so finders can reach you."></textarea><small class="muted" id="annCount">0 / 500</small></div>
+        <button class="btn btn-primary" id="annGo">Send announcement</button>
+      </form></section>
+  </main>
+</div>
+<div class="modal-bg" id="conModal" role="dialog" aria-modal="true" aria-labelledby="conTitle"><div class="modal console">
+  <div class="flex between mb"><h3 id="conTitle">Report</h3><button class="btn btn-ghost btn-sm" onclick="closeModal('conModal')" aria-label="Close">✕</button></div>
+  <div class="con-grid" id="conBody"></div>
+</div></div>
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script src="ml-lite.js"></script>
+<script src="reports.js"></script>
+<script src="admin.js"></script>
+<script>
+const u = getUser();
+if (!adminLocalCheck()) { $('#denied').style.display = 'block'; }
+else {
+  $('#panel').style.display = 'grid';
+  if (!CONFIG.USE_DEMO) api('/auth/me').then(r => { if (!r.user || r.user.role !== 'admin') { Store.del('user'); location.reload(); } }).catch(() => { Store.del('user'); location.reload(); });
+  let users = [], pets = [], reqs = [], reps = [], repFilter = '';
+  const busy = async (fn, ok) => { try { await fn(); await load(); if (ok) toast(ok, 'ok'); } catch (e) { toast(e.message, 'err'); } };
+  async function load() {
+    [users, pets, reqs] = await Promise.all([AdminData.users(), AdminData.pets(), AdminData.requests()]);
+    try { reps = await Reports.list(); } catch (e) { reps = []; toast(e.message, 'err'); }
+    render();
+  }
+
+  $$('#adminSide a').forEach(a => a.onclick = e => {
+    e.preventDefault(); $$('#adminSide a').forEach(x => x.classList.toggle('active', x === a));
+    $$('[data-sec]').forEach(s => s.classList.toggle('hidden', s.dataset.sec !== a.dataset.s));
+  });
+  const go = s => $$('#adminSide a').find(a => a.dataset.s === s).click();
+  const has = (txt, q) => String(txt || '').toLowerCase().includes(q);
+
+  function renderOverview() {
+    const open = reps.filter(r => r.status === 'open'), pend = reqs.filter(r => r.status === 'pending'), lost = pets.filter(p => p.status === 'lost');
+    const st = (ico, bg, n, l, to) => `<button class="card stat statbtn" data-go="${to}"><div class="f-icon" style="background:${bg}">${ico}</div><div><b>${n}</b><span>${l}</span></div></button>`;
+    $('#stats').innerHTML = st('👥', '#dbeafe', users.length, 'Users', 'users') + st('🐾', '#ccfbf1', pets.length, 'Pets', 'pets') + st('🚨', '#fee2e2', lost.length, 'Pets marked lost', 'pets') + st('📍', '#ffedd5', open.length, 'Reports to review', 'reports');
+    const row = (ico, t, sub, to, label) => `<div class="att"><span>${ico}</span><div><b>${t}</b><small class="muted">${sub}</small></div><button class="btn btn-ghost btn-sm" data-go="${to}">${label}</button></div>`;
+    $('#attention').innerHTML = [
+      open.length ? row('📥', `${open.length} report${open.length > 1 ? 's' : ''} waiting`, 'Download the photo and match it', 'reports', 'Open') : '',
+      pend.length ? row('💌', `${pend.length} adoption request${pend.length > 1 ? 's' : ''} pending`, 'Approve or reject', 'requests', 'Open') : '',
+      users.filter(u => !u.is_active).length ? row('⏸', `${users.filter(u => !u.is_active).length} suspended account(s)`, 'Re-activate when ready', 'users', 'Open') : ''
+    ].join('') || '<div class="empty" style="padding:18px"><div class="em">🎉</div><p>Nothing needs your attention.</p></div>';
+    const sp = {}; pets.forEach(p => sp[p.species] = (sp[p.species] || 0) + 1);
+    $('#species').innerHTML = Object.entries(sp).map(([k, v]) => `<div style="margin-bottom:12px"><div class="flex between"><span>${EMOJI[k] || '🐾'} ${k}</span><b>${v}</b></div><div class="score-bar"><i style="width:${v / pets.length * 100}%"></i></div></div>`).join('');
+    const rs = { open: 0, matched: 0, resolved: 0 }; reps.forEach(r => rs[r.status] = (rs[r.status] || 0) + 1);
+    $('#repStatus').innerHTML = Object.entries(rs).map(([k, v]) => `<div class="flex between" style="margin-bottom:8px"><span>${STATUS_LABEL[k][0]}</span><b>${v}</b></div>`).join('');
+    $('#nbReports').textContent = open.length; $('#nbReports').hidden = !open.length;
+    $('#nbReqs').textContent = pend.length; $('#nbReqs').hidden = !pend.length;
+    $$('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+  }
+
+  function renderUsers() {
+    const q = $('#uQ').value.trim().toLowerCase(), role = $('#uRole').value, me = getUser();
+    const rows = users.filter(x => (!role || x.role === role) && (!q || has(x.name, q) || has(x.email, q) || has(x.phone, q)));
+    $('#uRows').innerHTML = rows.map(x => { const self = x.user_id == me.user_id || x.email === me.email;
+      return `<tr class="${x.is_active ? '' : 'dim'}"><td>#${x.user_id}</td><td><b>${esc(x.name)}</b><br><small class="muted">Joined ${fmtDate(x.created_at)}</small></td><td>${esc(x.email)}</td><td>${esc(x.phone || '')}</td><td>${x.pets}</td>
+      <td><span class="badge ${x.role === 'admin' ? 'b-info' : 'b-gray'}">${x.role}</span></td><td>${x.is_active ? '<span class="badge b-ok">Active</span>' : '<span class="badge b-danger">Suspended</span>'}</td>
+      <td class="acts">${self ? '<small class="muted">You</small>' : `<button class="btn btn-ghost btn-sm" data-a="role" data-id="${x.user_id}">${x.role === 'admin' ? 'Make user' : 'Make admin'}</button>
+        <button class="btn btn-ghost btn-sm" data-a="active" data-id="${x.user_id}">${x.is_active ? 'Suspend' : 'Activate'}</button>
+        <button class="btn btn-ghost btn-sm" data-a="msg" data-id="${x.user_id}">Message</button>
+        <button class="btn btn-danger btn-sm" data-a="del" data-id="${x.user_id}">Delete</button>`}</td></tr>`; }).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;padding:26px">No users match.</td></tr>';
+  }
+  $('#uRows').onclick = e => {
+    const b = e.target.closest('button[data-a]'); if (!b) return; const x = users.find(u => u.user_id == b.dataset.id); if (!x) return;
+    if (b.dataset.a === 'role') busy(() => AdminData.setRole(x.user_id, x.role === 'admin' ? 'user' : 'admin'), x.name + ' is now ' + (x.role === 'admin' ? 'a user' : 'an admin'));
+    if (b.dataset.a === 'active') { if (x.is_active && !confirm(`Suspend ${x.name}? They will not be able to sign in.`)) return; busy(() => AdminData.setActive(x.user_id, !x.is_active), x.is_active ? 'Account suspended' : 'Account re-activated'); }
+    if (b.dataset.a === 'del' && confirm(`Delete ${x.name} and all their pets and reports? This cannot be undone.`)) busy(() => AdminData.delUser(x.user_id), 'User deleted');
+    if (b.dataset.a === 'msg') { $('#annTo').value = x.user_id; go('announce'); $('#annMsg').focus(); }
+  };
+  ['uQ', 'uRole'].forEach(i => $('#' + i).addEventListener('input', renderUsers));
+
+  function renderPets() {
+    const q = $('#pQ').value.trim().toLowerCase(), sp = $('#pSp').value, stt = $('#pSt').value;
+    const rows = pets.filter(p => (!sp || p.species === sp) && (!stt || p.status === stt) && (!q || has(p.name, q) || has(p.breed, q) || has(p.owner_name, q)));
+    $('#pRows').innerHTML = rows.map(p => `<tr><td style="width:60px"><img src="${esc(petImgs(p)[0] || '')}" alt="" class="pthumb" onerror="this.style.visibility='hidden'"></td><td><b>${esc(p.name)}</b><br><small class="muted">${EMOJI[p.species] || '🐾'} ${p.species} · #${p.pet_id}</small></td><td>${esc(p.owner_name)}</td><td>${esc(p.breed || '')}</td><td>${p.age ?? ''}</td>
+      <td><select class="stsel ${p.status}" data-id="${p.pet_id}" aria-label="Status of ${esc(p.name)}">${[['owned', 'With owner'], ['adoption', 'For adoption'], ['lost', 'Lost'], ['adopted', 'Adopted']].map(([v, l]) => `<option value="${v}" ${p.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+      <td class="acts"><a class="btn btn-ghost btn-sm" href="pet-details.html?id=${p.pet_id}">View</a> <button class="btn btn-danger btn-sm" data-a="del" data-id="${p.pet_id}">Delete</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted" style="text-align:center;padding:26px">No pets match.</td></tr>';
+  }
+  $('#pRows').onchange = e => { const s = e.target.closest('select.stsel'); if (s) busy(() => AdminData.setPetStatus(s.dataset.id, s.value), 'Status updated'); };
+  $('#pRows').onclick = e => { const b = e.target.closest('button[data-a=del]'); if (!b) return; const p = pets.find(x => x.pet_id == b.dataset.id); if (p && confirm(`Delete ${p.name}? This removes the pet and its photos.`)) busy(() => AdminData.delPet(p.pet_id), p.name + ' deleted'); };
+  ['pQ', 'pSp', 'pSt'].forEach(i => $('#' + i).addEventListener('input', renderPets));
+
+  function renderReqs() {
+    const f = $('#rSt').value;
+    $('#rRows').innerHTML = reqs.filter(r => !f || r.status === f).map(r => `<tr><td><b>${esc(r.pet)}</b></td><td>${esc(r.requester)}</td><td style="max-width:280px">${esc(r.message)}</td><td>${fmtDate(r.date)}</td><td>${statusBadge(r.status)}</td>
+      <td class="acts">${r.status === 'pending' ? `<button class="btn btn-ok btn-sm" data-s="approved" data-id="${r.request_id}">Approve</button> <button class="btn btn-danger btn-sm" data-s="rejected" data-id="${r.request_id}">Reject</button>` : '—'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted" style="text-align:center;padding:26px">No requests.</td></tr>';
+  }
+  $('#rRows').onclick = e => { const b = e.target.closest('button[data-s]'); if (b) busy(() => AdminData.decideRequest(b.dataset.id, b.dataset.s), 'Request ' + b.dataset.s); };
+  $('#rSt').addEventListener('input', renderReqs);
+
+  /* announcements */
+  $('#annMsg').addEventListener('input', e => $('#annCount').textContent = e.target.value.length + ' / 500');
+  $('#annForm').onsubmit = async e => {
+    e.preventDefault(); const msg = $('#annMsg').value.trim(); if (!msg) return toast('Write a message first', 'err');
+    const to = $('#annTo').value, who = to ? users.find(u => u.user_id == to).name : 'all users';
+    if (!confirm(`Send this message to ${who}?`)) return;
+    $('#annGo').disabled = true;
+    try { const n = await AdminData.announce(msg, to ? +to : 0); toast(`Sent to ${n} ${n === 1 ? 'person' : 'people'}`, 'ok'); $('#annMsg').value = ''; $('#annCount').textContent = '0 / 500'; }
+    catch (err) { toast(err.message, 'err'); } finally { $('#annGo').disabled = false; }
+  };
+
+  function render() {
+    $('#annTo').innerHTML = '<option value="">All users</option>' + users.filter(u => u.role === 'user').map(u => `<option value="${u.user_id}">${esc(u.name)} (${esc(u.email)})</option>`).join('');
+    renderOverview(); renderUsers(); renderPets(); renderReqs(); renderReports();
+  }
+  window.delRep = async id => { if (confirm('Remove this report?')) { try { await Reports.remove({ report_id: id }); reps = reps.filter(r => r.report_id != id); render(); toast('Report removed'); } catch (e) { toast(e.message, 'err'); } } };
+
+  /* ---------- reports grid ---------- */
+  function renderReports() {
+    const rows = reps.filter(r => !repFilter || r.report_type === repFilter || (repFilter === 'open' && r.status === 'open'));
+    $$('#repFilter button').forEach(b => { const on = b.dataset.f === repFilter; b.classList.toggle('btn-primary', on); b.classList.toggle('btn-ghost', !on); });
+    $('#lRows').innerHTML = rows.map(r => {
+      const [st, stc] = STATUS_LABEL[r.status] || STATUS_LABEL.open, dl = Reports.download(r), sg = r.suggestion;
+      return `<div class="card feature" style="padding:0;overflow:hidden"><div class="rc-photo"><img src="${esc(r.image)}" alt="Report ${r.report_id} photo" loading="lazy"><span class="badge ${r.report_type === 'lost' ? 'b-danger' : 'b-info'}">${TYPE_LABEL[r.report_type]} #${r.report_id}</span></div>
+        <div style="padding:16px 18px"><div class="flex between"><b>${esc(r.pet_name || r.species)}</b><span class="badge ${stc}">${st}</span></div>
+        <p style="font-size:.84rem;margin:6px 0">📍 ${esc(r.location)}<br>📅 ${fmtDate(r.found_date)} &nbsp; 👤 ${esc(r.reporter)}${r.phone ? ' &nbsp; ☎ ' + esc(r.phone) : ''}</p>
+        ${r.matched ? `<p style="font-size:.84rem;background:#eff6ff;padding:6px 10px;border-radius:10px">Matched with <b>${esc(r.matched.label)}</b></p>` : sg ? `<p style="font-size:.84rem;background:#f0fdf4;padding:6px 10px;border-radius:10px">Closest photo: <b>${esc(sg.label)}</b> (${sg.score}%)</p>` : '<p class="muted" style="font-size:.84rem">No similar photo yet.</p>'}
+        <div class="flex wrap" style="gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" onclick="openReport(${r.report_id})">Review &amp; match</button><a class="btn btn-ghost btn-sm" href="${esc(dl.href)}" download="${esc(dl.name)}">⬇ Photo</a><button class="btn btn-ghost btn-sm" aria-label="Remove report ${r.report_id}" onclick="delRep(${r.report_id})">🗑</button></div></div></div>`;
+    }).join('') || '<div class="empty" style="grid-column:1/-1"><div class="em">📭</div><p>No reports here.</p></div>';
+  }
+  $$('#repFilter button').forEach(b => b.onclick = () => { repFilter = b.dataset.f; renderReports(); });
+
+  /* ---------- match console ---------- */
+  let cur = null, cands = [], sel = null, extra = null;
+  window.openReport = async id => {
+    cur = reps.find(r => r.report_id == id); if (!cur) return toast('Report not found', 'err');
+    sel = null; extra = null; cands = [];
+    $('#conTitle').textContent = `${TYPE_LABEL[cur.report_type]} report #${cur.report_id}${cur.pet_name ? ' · ' + cur.pet_name : ''}`;
+    drawConsole(true); openModal('conModal');
+    try { cands = await Reports.candidates(cur); } catch (e) { toast(e.message, 'err'); }
+    if (cur.matched) sel = cands.find(c => c.kind === cur.matched.kind && c.id == cur.matched.id) || null;
+    if (!sel) sel = cands[0] || null;
+    drawConsole(false);
+  };
+  function drawConsole(loading) {
+    const r = cur, dl = Reports.download(r), [st, stc] = STATUS_LABEL[r.status] || STATUS_LABEL.open, right = extra || sel;
+    const left = `<div><img class="con-photo" src="${esc(r.image)}" alt="Photo submitted in report ${r.report_id}">
+      <div class="flex between wrap" style="margin:12px 0"><span class="badge ${stc}">${st}</span><a class="btn btn-accent btn-sm" href="${esc(dl.href)}" download="${esc(dl.name)}">⬇ Download photo</a></div>
+      <p style="font-size:.9rem">📍 ${esc(r.location)}<br>📅 ${fmtDate(r.found_date)}<br>👤 ${esc(r.reporter)}${r.phone ? '<br>☎ <b>' + esc(r.phone) + '</b>' : ''}</p>
+      <p class="muted" style="font-size:.88rem;margin:8px 0 16px">${esc(r.description) || 'No description.'}</p>
+      <div class="field"><label for="otherPhoto">Compare with another photo</label><input type="file" id="otherPhoto" accept="image/*"></div>
+      <div id="otherRes" class="muted" style="font-size:.86rem"></div></div>`;
+    const list = loading ? '<p class="muted">Comparing photos…</p>' : cands.length ? cands.map((c, i) => { const v = verdict(c.score);
+      return `<button class="cand" aria-pressed="${sel === c && !extra}" data-i="${i}"><img src="${esc(c.image)}" alt=""><span><b>${esc(c.label)}</b> <span class="badge ${v[1]}" style="margin-left:4px">${v[0]}</span><br><small class="muted">${esc(c.sub)}</small><div class="score-bar"><i style="width:${c.score}%"></i></div><small>${c.score}% similar</small></span></button>`; }).join('')
+      : '<div class="empty" style="padding:20px"><p>No similar photo on file yet. New reports and pets are checked as they arrive.</p></div>';
+    const cmp = right ? `<h4 style="margin:14px 0 8px">Compare: this report vs ${esc(right.label)} <span class="badge ${verdict(right.score)[1]}">${right.score}%</span></h4>
+      <div class="swipe" id="swipe" style="--cut:50%"><img src="${esc(right.image)}" alt="${esc(right.label)}"><img class="top" src="${esc(r.image)}" alt="This report"><span class="bar"></span><span class="tag" style="left:10px">This report</span><span class="tag" style="right:10px">${esc(right.label)}</span><input type="range" min="0" max="100" value="50" aria-label="Drag to compare the two photos"></div>
+      <p class="muted" style="font-size:.8rem;margin-top:6px">Drag across the photos to compare. Colour and pattern similarity is a guide: check markings, ears, eyes and any collar yourself.</p>` : '';
+    const done = r.status === 'resolved';
+    const act = `<div class="field" style="margin-top:14px"><label for="adminNote">Note (optional)</label><input id="adminNote" maxlength="500" value="${esc(r.admin_note || '')}" placeholder="e.g. Called owner, collar matches"></div>
+      <div class="flex wrap" style="gap:8px">${done ? '<span class="badge b-ok">Reunited</span>' : `<button class="btn btn-ok btn-sm" id="bConfirm" ${sel && !extra ? '' : 'disabled'}>Confirm match</button>${r.status === 'matched' ? '<button class="btn btn-primary btn-sm" id="bReunite">Mark reunited</button>' : ''}<button class="btn btn-ghost btn-sm" id="bReject">Not a match</button>`}</div>`;
+    $('#conBody').innerHTML = left + `<div><h4 style="margin-bottom:10px">Closest photos on file</h4>${list}${cmp}${act}</div>`;
+    $$('.cand', $('#conBody')).forEach(b => b.onclick = () => { sel = cands[+b.dataset.i]; extra = null; drawConsole(false); });
+    const sw = $('#swipe'); if (sw) $('input', sw).oninput = e => sw.style.setProperty('--cut', (100 - e.target.value) + '%');
+    $('#otherPhoto').onchange = async e => {
+      const f = e.target.files[0]; if (!f) return; $('#otherRes').textContent = 'Comparing…';
+      try { const res = await Reports.compareWith(cur, f); extra = { label: 'Your photo', image: URL.createObjectURL(f), score: res.score }; drawConsole(false); $('#otherRes').innerHTML = `Similarity with your photo: <b>${res.score}%</b>`; }
+      catch (err) { $('#otherRes').textContent = err.message === 'Failed to fetch' ? ML.blockedMessage() : (err.message || ML.blockedMessage()); }
+    };
+    const run = async (action, msg) => { const note = $('#adminNote').value.trim(); try { await Reports.decide(cur, { action, cand: sel, note }); [reps, pets] = await Promise.all([Reports.list(), AdminData.pets()]); renderReports(); render(); cur = reps.find(x => x.report_id === cur.report_id); toast(msg, 'ok'); closeModal('conModal'); } catch (err) { toast(err.message, 'err'); } };
+    if ($('#bConfirm')) $('#bConfirm').onclick = () => run('confirm', 'Match confirmed. The people involved were notified.');
+    if ($('#bReunite')) $('#bReunite').onclick = () => run('reunite', 'Marked as reunited.');
+    if ($('#bReject')) $('#bReject').onclick = () => run('reject', 'Marked as not a match.');
+  }
+
+  (async () => {
+    try { await load(); } catch (e) { toast(e.message, 'err'); }
+    const h = location.hash.slice(1); if (h && $$('#adminSide a').some(a => a.dataset.s === h)) go(h);
+    const q = new URLSearchParams(location.search).get('report');
+    if (q) { $$('#adminSide a').find(a => a.dataset.s === 'reports').click(); openReport(q); }
+  })();
+}
+</script>
+</body>
+</html>

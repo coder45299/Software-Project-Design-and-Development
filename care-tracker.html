@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pet Care Tracker – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="care">
+<div id="nav"></div>
+<div class="container">
+  <div class="page-head flex between wrap">
+    <div><h1>💉 Pet Care Tracker</h1><p class="muted">Keep every vaccination, checkup and grooming session on schedule.</p></div>
+    <button class="btn btn-primary" onclick="openModal('recModal')">➕ Add record</button>
+  </div>
+  <div class="card mt flex wrap" style="gap:16px">
+    <label style="font-weight:600">Select pet:</label>
+    <select id="petSel" aria-label="Choose a pet" style="max-width:260px"></select>
+  </div>
+  <div class="grid g3 mt" id="sum"></div>
+
+  <div class="grid split mt mb">
+    <div class="card"><h3 class="mb">⏰ Upcoming</h3><div id="upcoming"></div></div>
+    <div class="card"><h3 class="mb">📋 History</h3>
+      <div class="table-wrap"><table><thead><tr><th>Type</th><th>Date</th><th>Notes</th><th>Next due</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="recModal"><div class="modal">
+  <div class="flex between mb"><h3>Add care record</h3><button class="btn btn-ghost btn-sm" onclick="closeModal('recModal')">✕</button></div>
+  <form id="recForm">
+    <div class="field"><label for="modalPet">Pet</label><select name="pet_id" id="modalPet"></select></div>
+    <div class="row">
+      <div class="field"><label for="f2-type">Type</label><select id="f2-type" name="type"><option>Vaccination</option><option>Deworming</option><option>Vet Checkup</option><option>Grooming</option><option>Medication</option><option>Other</option></select></div>
+      <div class="field"><label for="f3-date">Date</label><input id="f3-date" type="date" name="date" required></div>
+    </div>
+    <div class="field"><label for="f4-next_due_date">Next due date</label><input id="f4-next_due_date" type="date" name="next_due_date"></div>
+    <div class="field"><label for="f5-notes">Notes</label><textarea id="f5-notes" name="notes" placeholder="Vaccine name, vet, dosage..."></textarea></div>
+    <button class="btn btn-primary btn-block">Save record</button>
+  </form>
+</div></div>
+
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script>
+if (requireLogin()) {
+  const pets = Data.pets().filter(p => p.owner_id == 1 || p.owner_id == getUser().user_id);
+  const opts = pets.map(p => `<option value="${p.pet_id}">${EMOJI[p.species]} ${esc(p.name)}</option>`).join('');
+  $('#petSel').innerHTML = opts; $('#modalPet').innerHTML = opts;
+  const pre = new URLSearchParams(location.search).get('pet'); if (pre) $('#petSel').value = pre;
+  $('#recForm').date.value = todayISO();
+
+  function render() {
+    const pid = $('#petSel').value;
+    const recs = Data.care().filter(c => c.pet_id == pid).sort((a, b) => b.date.localeCompare(a.date));
+    const due = recs.filter(c => c.next_due_date).sort((a, b) => a.next_due_date.localeCompare(b.next_due_date));
+    const over = due.filter(c => daysUntil(c.next_due_date) < 0).length, soon = due.filter(c => { const d = daysUntil(c.next_due_date); return d >= 0 && d <= 14; }).length;
+    $('#sum').innerHTML = [['📋', '#dbeafe', recs.length, 'Total records'], ['⚠️', '#fee2e2', over, 'Overdue'], ['⏰', '#fef3c7', soon, 'Due in 14 days']]
+      .map(([i, bg, n, l]) => `<div class="card stat"><div class="f-icon" style="background:${bg}">${i}</div><div><b>${n}</b><span>${l}</span></div></div>`).join('');
+    $('#upcoming').innerHTML = due.map(c => {
+      const d = daysUntil(c.next_due_date);
+      const b = d < 0 ? `<span class="badge b-danger">${-d}d overdue</span>` : d <= 14 ? `<span class="badge b-warn">in ${d}d</span>` : `<span class="badge b-ok">in ${d}d</span>`;
+      return `<div class="reminder"><div class="r-ico">📅</div><div class="r-main"><b>${esc(c.type)}</b><br><small class="muted">${fmtDate(c.next_due_date)}</small></div>${b}</div>`;
+    }).join('') || '<div class="empty">Nothing scheduled</div>';
+    $('#rows').innerHTML = recs.map(c => `<tr><td><b>${esc(c.type)}</b></td><td>${fmtDate(c.date)}</td><td>${esc(c.notes) || '-'}</td><td>${fmtDate(c.next_due_date)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="del(${c.record_id})">🗑</button></td></tr>`).join('') || '<tr><td colspan="5"><div class="empty">No records yet</div></td></tr>';
+  }
+  window.del = id => { if (!confirm('Delete this record?')) return; Data.saveCare(Data.care().filter(c => c.record_id != id)); render(); toast('Record deleted'); };
+  $('#petSel').onchange = render;
+  $('#recForm').onsubmit = async e => {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target));
+    try {
+      await api('/care', { method: 'POST', body: f });
+      const all = Data.care(); all.push({ ...f, pet_id: +f.pet_id, record_id: Math.max(0, ...all.map(c => c.record_id)) + 1 }); Data.saveCare(all);
+      $('#petSel').value = f.pet_id; closeModal('recModal'); e.target.reset(); e.target.date.value = todayISO(); render(); toast('Record saved', 'ok');
+    } catch (err) { toast(err.message, 'err'); }
+  };
+  render();
+}
+</script>
+</body>
+</html>

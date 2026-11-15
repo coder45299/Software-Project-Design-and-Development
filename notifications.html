@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Notifications – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .notif .n-photo{position:relative;width:92px;height:92px;border-radius:14px;overflow:hidden;flex-shrink:0;background:#e2e8f0;display:block}
+ .notif .n-photo img{width:100%;height:100%;object-fit:cover}
+ .n-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+ .n-pair{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+ .notif .n-pair .n-photo{width:112px;height:112px;position:relative}
+ .n-photo span{position:absolute;left:6px;bottom:6px;font-size:.66rem;font-weight:700;background:rgba(15,23,42,.78);color:#fff;padding:2px 8px;border-radius:99px}
+ .n-photo.reg{outline:2px solid var(--primary)}
+ .n-card{margin-top:8px}.n-head{display:flex;gap:8px;margin-bottom:8px}
+ .n-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:.88rem}.n-dl dt{color:var(--muted,#64748b)}.n-dl dd{margin:0}
+ @media(max-width:560px){.notif{flex-wrap:wrap}}
+</style>
+</head>
+<body data-page="notif">
+<div id="nav"></div>
+<div class="container" style="max-width:860px">
+  <div class="page-head flex between wrap">
+    <div><h1>🔔 Notifications</h1><p class="muted" id="sub">Matches, adoption requests and care reminders.</p></div>
+    <button class="btn btn-ghost" id="markAll">✓ Mark all as read</button>
+  </div>
+  <div class="tabs mt" id="nTabs" style="max-width:340px"><button class="tab active" data-f="all">All</button><button class="tab" data-f="unread">Unread</button></div>
+  <div class="card mb" style="padding:0;overflow:hidden" id="list"></div>
+</div>
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script src="ml-lite.js"></script>
+<script src="reports.js"></script>
+<script>
+if (requireLogin()) (async () => {
+  const me = getUser(), admin = me.role === 'admin';
+  if (admin) $('#sub').textContent = 'New lost and found reports arrive here. Open one to download the photo and match it.';
+  let filter = 'all', items = [], repById = {};
+  const ico = { match: ['🔎', '#dcfce7'], adoption: ['🏠', '#ffedd5'], care: ['💉', '#dbeafe'], system: ['✨', '#ede9fe'], report: ['📸', '#fee2e2'] };
+
+  async function load() {
+    if (CONFIG.USE_DEMO) items = Data.notifs();
+    else items = (await api('/notifications')).data.map(n => ({ ...n, report_id: n.ref_id ? +n.ref_id : null, image: n.image_path || null, report_type: n.report_type, report_status: n.report_status }));
+    if (admin) { try { (await Reports.list()).forEach(r => repById[r.report_id] = r); await loadPets(); } catch (e) { /* list needs admin */ } }
+  }
+
+  const petById = {};
+  async function loadPets() {
+    for (const r of Object.values(repById)) {
+      if (!r.pet_id || petById[r.pet_id]) continue;
+      try { petById[r.pet_id] = CONFIG.USE_DEMO ? Data.pet(r.pet_id) : (await api('/pets/' + r.pet_id)).data; } catch (e) { /* pet may be deleted */ }
+    }
+  }
+  function reportBlock(n) {
+    const r = repById[n.report_id] || (n.image ? { report_id: n.report_id, image: n.image, species: '', report_type: n.report_type || 'report', status: n.report_status || 'open' } : null);
+    if (!r) return '';
+    const dl = Reports.download(r), [st, stc] = STATUS_LABEL[r.status] || STATUS_LABEL.open, pet = r.pet_id ? petById[r.pet_id] : null;
+    const regImg = pet ? petImgs(pet)[0] : null, lost = r.report_type === 'lost';
+    const photos = `<div class="n-pair"><a class="n-photo" href="admin.html?report=${r.report_id}" aria-label="Open report ${r.report_id}"><img src="${esc(r.image)}" alt="Photo sent in report ${r.report_id}" loading="lazy"><span>Sent photo</span></a>`
+      + (regImg ? `<div class="n-photo reg"><img src="${esc(regImg)}" alt="Registered photo of ${esc(pet.name)}" loading="lazy"><span>Registered</span></div>` : '') + '</div>';
+    const who = lost ? 'Owner' : 'Finder';
+    const rows = `<div class="n-card"><div class="n-head"><span class="badge ${lost ? 'b-danger' : 'b-info'}">${lost ? 'Lost pet' : 'Found pet'}</span><span class="badge ${stc}">${st}</span></div>
+      <dl class="n-dl">
+        ${r.pet_name || pet ? `<dt>Pet</dt><dd><b>${esc(r.pet_name || pet.name)}</b> · ${esc(r.species)}${pet ? ' · ' + esc(pet.breed || '') + (pet.age != null ? ' · ' + pet.age + ' yr' : '') : ''}${pet ? ' <span class="muted">(registered #' + pet.pet_id + ')</span>' : ''}</dd>` : `<dt>Species</dt><dd>${esc(r.species)}</dd>`}
+        <dt>${who}</dt><dd><b>${esc(r.reporter || '')}</b>${r.phone ? ' · ☎ <a href="tel:' + esc(r.phone) + '">' + esc(r.phone) + '</a>' : ''}</dd>
+        <dt>${lost ? 'Last seen' : 'Found at'}</dt><dd>${esc(r.location || '')}${r.found_date ? ' · ' + fmtDate(r.found_date) : ''}</dd>
+        ${r.description ? `<dt>Details</dt><dd>${esc(r.description)}</dd>` : ''}
+        ${r.suggestion && !r.matched ? `<dt>ML hint</dt><dd>Closest photo: <b>${esc(r.suggestion.label)}</b> (${r.suggestion.score}%)</dd>` : ''}
+      </dl>
+      <div class="n-actions"><a class="btn btn-primary btn-sm" href="admin.html?report=${r.report_id}">Review &amp; match</a><a class="btn btn-ghost btn-sm" href="${esc(dl.href)}" download="${esc(dl.name)}">⬇ Download photo</a></div></div>`;
+    return photos + '@@' + rows;
+  }
+
+  function render() {
+    const list = items.filter(n => filter === 'all' || !+n.is_read);
+    $('#list').innerHTML = list.map(n => {
+      const [i, bg] = ico[n.type] || ['🔔', '#f1f5f9'];
+      const rb = n.type === 'report' && n.report_id && admin ? reportBlock(n) : (n.type === 'adoption' && admin ? '@@<div class="n-actions"><a class="btn btn-primary btn-sm" href="admin.html#requests">Review request</a></div>' : ''), [photo, actions] = rb ? rb.split('@@') : ['', ''];
+      return `<div class="notif ${+n.is_read ? '' : 'unread'}">${photo || `<div class="r-ico" style="background:${bg}">${i}</div>`}
+        <div style="flex:1;min-width:0"><p style="${+n.is_read ? '' : 'font-weight:600'}">${esc(n.message)}</p><small class="muted">${fmtDate(n.created_at)}</small>${actions}</div>
+        ${+n.is_read ? '' : `<button class="btn btn-ghost btn-sm" onclick="markRead(${n.notif_id})">Mark read</button>`}
+        <button class="btn btn-ghost btn-sm" aria-label="Delete notification" onclick="rm(${n.notif_id})">🗑</button></div>`;
+    }).join('') || '<div class="empty"><div class="em">🎉</div><p>You are all caught up!</p></div>';
+  }
+  async function refresh() { await load(); window.__unread = undefined; mountLayout(); render(); }
+  window.markRead = async id => { if (CONFIG.USE_DEMO) Data.markRead(id); else await api('/notifications/read', { method: 'POST', body: { id } }); refresh(); };
+  window.rm = async id => { if (CONFIG.USE_DEMO) Data.removeNotif(id); else await api('/notifications/' + id, { method: 'DELETE' }); refresh(); };
+  $('#markAll').onclick = async () => { if (CONFIG.USE_DEMO) Data.markAllRead(); else await api('/notifications/read', { method: 'POST', body: {} }); await refresh(); toast('All marked as read', 'ok'); };
+  $$('#nTabs .tab').forEach(b => b.onclick = () => { $$('#nTabs .tab').forEach(x => x.classList.toggle('active', x === b)); filter = b.dataset.f; render(); });
+  await refresh();
+})();
+</script>
+</body>
+</html>

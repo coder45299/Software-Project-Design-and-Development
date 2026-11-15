@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="dashboard">
+<div id="nav"></div>
+<div class="container layout">
+  <aside class="card side">
+    <div class="user-mini"><div class="avatar" id="av">U</div><b id="uname">User</b><br><small class="muted" id="umail"></small></div>
+    <a class="active" href="dashboard.html">📊 Overview</a>
+    <a href="pet-form.html">➕ Add a pet</a>
+    <a href="care-tracker.html">💉 Care tracker</a>
+    <a href="adoption.html">🏠 Adoption</a>
+    <a href="find-my-pet.html">🔎 Find my pet</a>
+    <a href="lost-found.html">📍 Lost &amp; found</a>
+    <a href="notifications.html">🔔 Notifications</a>
+  </aside>
+  <main>
+    <div class="flex between wrap mb">
+      <div><h1 id="hello">Hello 👋</h1><p class="muted">Here is what is happening with your pets.</p></div>
+      <a href="pet-form.html" class="btn btn-primary">➕ Add new pet</a>
+    </div>
+    <div class="grid g4 mb" id="stats"></div>
+
+    <div class="card mb">
+      <div class="flex between mb"><h3>My pets</h3><a href="pet-form.html" class="btn btn-ghost btn-sm">Add pet</a></div>
+      <div class="grid g3" id="myPets"></div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card"><div class="flex between"><h3>⏰ Upcoming reminders</h3><a href="care-tracker.html" class="btn btn-ghost btn-sm">Open tracker</a></div><div id="reminders"></div></div>
+      <div class="card"><div class="flex between"><h3>🔔 Recent notifications</h3><a href="notifications.html" class="btn btn-ghost btn-sm">View all</a></div><div id="recent"></div></div>
+    </div>
+  </main>
+</div>
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script>
+(async () => {
+if (requireLogin()) {
+  const u = getUser();
+  $('#av').textContent = (u.name || 'U')[0].toUpperCase();
+  $('#uname').textContent = u.name; $('#umail').textContent = u.email;
+  $('#hello').textContent = 'Hello, ' + (u.name || '').split(' ')[0] + ' 👋';
+
+  let pets, care, notifs;
+  if (CONFIG.USE_DEMO) {
+    pets = Data.pets().filter(p => p.owner_id == 1 || p.owner_id == u.user_id);
+    care = Data.care().filter(c => c.next_due_date && pets.some(p => p.pet_id == c.pet_id));
+    notifs = Data.notifs();
+  } else {                                   // server mode: the data comes from the PHP API (defect D-7)
+    pets = (await api('/pets/mine')).data;
+    care = (await api('/care/upcoming')).data.map(c => ({ ...c, pet_id: +c.pet_id }));
+    notifs = (await api('/notifications')).data;
+  }
+  care = care.sort((a, b) => a.next_due_date.localeCompare(b.next_due_date));
+  const stat = (ico, bg, n, l) => `<div class="card stat"><div class="f-icon" style="background:${bg}">${ico}</div><div><b>${n}</b><span>${l}</span></div></div>`;
+  $('#stats').innerHTML = stat('🐾', '#ccfbf1', pets.length, 'My pets') +
+    stat('⏰', '#fef3c7', care.filter(c => daysUntil(c.next_due_date) <= 7).length, 'Due this week') +
+    stat('🏠', '#ffedd5', pets.filter(p => p.status === 'adoption').length, 'For adoption') +
+    stat('🔔', '#dbeafe', notifs.filter(n => !n.is_read).length, 'Unread alerts');
+
+  $('#myPets').innerHTML = pets.length ? pets.map(p => `<div class="card" style="padding:0;overflow:hidden">
+    <a href="pet-details.html?id=${p.pet_id}"><div class="pet-thumb" style="background:${grad(p.pet_id)};height:130px">${thumbHTML(p)}</div></a>
+    <div style="padding:14px 16px"><div class="flex between"><b>${esc(p.name)}</b>${statusBadge(p.status)}</div>
+    <p class="muted" style="font-size:.84rem">${esc(p.breed)} • ${p.age} yrs</p>
+    <div class="flex mt" style="gap:8px;margin-top:12px"><a class="btn btn-ghost btn-sm" href="pet-form.html?id=${p.pet_id}">Edit</a><a class="btn btn-ghost btn-sm" href="care-tracker.html?pet=${p.pet_id}">Care</a></div></div></div>`).join('')
+    : `<div class="empty" style="grid-column:1/-1"><div class="em">🐾</div><p>You have not added any pets yet.</p><a href="pet-form.html" class="btn btn-primary mt">Add your first pet</a></div>`;
+
+  $('#reminders').innerHTML = care.slice(0, 5).map(c => {
+    const d = daysUntil(c.next_due_date), p = pets.find(x => x.pet_id == c.pet_id) || (CONFIG.USE_DEMO ? Data.pet(c.pet_id) : null);
+    const b = d < 0 ? `<span class="badge b-danger">${-d}d overdue</span>` : d <= 7 ? `<span class="badge b-warn">in ${d}d</span>` : `<span class="badge b-ok">in ${d}d</span>`;
+    return `<div class="reminder"><div class="r-ico">💉</div><div class="r-main"><b>${esc(c.type)}</b> – ${esc(p ? p.name : '')}<br><small class="muted">Due ${fmtDate(c.next_due_date)}</small></div>${b}</div>`;
+  }).join('') || '<div class="empty">No reminders 🎉</div>';
+
+  $('#recent').innerHTML = notifs.slice(0, 4).map(n => `<div class="reminder"><div class="r-ico" style="background:var(--primary-l)">${{ match: '🔎', adoption: '🏠', care: '💉', system: '✨' }[n.type] || '🔔'}</div><div class="r-main"><span style="font-size:.9rem;${n.is_read ? '' : 'font-weight:600'}">${esc(n.message)}</span><br><small class="muted">${fmtDate(n.created_at)}</small></div></div>`).join('');
+}
+})();
+</script>
+</body>
+</html>

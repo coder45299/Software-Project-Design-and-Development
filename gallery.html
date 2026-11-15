@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pet gallery – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="gallery.css">
+</head>
+<body data-page="gallery" class="gal">
+<div id="nav"></div>
+<main class="wrap-g">
+  <section class="g-hero">
+    <div>
+      <span class="g-eyebrow">The PetBio registry</span>
+      <h1>Every pet, <em>one face</em> at a time.</h1>
+      <p id="intro" aria-live="polite">Loading the registry…</p>
+      <div class="g-stats" id="stats"></div>
+    </div>
+    <div class="collage" id="collage" aria-hidden="true"></div>
+  </section>
+
+  <section class="miss hidden" id="miss" aria-labelledby="missH">
+    <div class="miss-h"><span class="pulse"></span><h2 id="missH">Missing right now</h2><a href="lost-found.html?tab=found">Seen one? Report it →</a></div>
+    <div class="miss-row" id="missRow"></div>
+  </section>
+
+  <div class="g-bar" role="group" aria-label="Filter pets">
+    <div class="seg" id="fSpecies" aria-label="Species"></div>
+    <div class="seg" id="fStatus" aria-label="Status"></div>
+    <span class="sp"></span>
+    <input type="search" id="q" placeholder="Search name, breed or city" aria-label="Search pets">
+    <select id="sort" aria-label="Sort pets">
+      <option value="no">Registry number</option><option value="name">Name A to Z</option><option value="age">Youngest first</option>
+    </select>
+  </div>
+
+  <div class="sheet" id="sheet"></div>
+  <div class="none hidden" id="none"><h2>No pets match those filters</h2><p>Try another species or clear the search.</p><button class="gbtn" id="clear">Clear filters</button></div>
+</main>
+
+<dialog class="dossier" id="dlg" aria-labelledby="dName">
+  <button class="x" id="dClose" aria-label="Close">✕</button>
+  <div class="dos">
+    <div class="dos-photo"><img id="dImg" alt=""><button class="step prev" id="dPrev" aria-label="Previous pet">‹</button><button class="step next" id="dNext" aria-label="Next pet">›</button></div>
+    <div class="dos-body" id="dBody"></div>
+  </div>
+</dialog>
+<div id="footer"></div>
+
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script>
+const SP_LABEL = { Dog: 'Dogs', Cat: 'Cats', Bird: 'Parrots', Rabbit: 'Rabbits', Other: 'Other' };
+const regNo = p => 'PB-' + String(p.pet_id).padStart(4, '0');
+let all = [], f = { species: '', status: '', q: '', sort: 'no' }, view = [], openId = null;
+
+const photoOf = p => petImgs(p)[0] || '';
+const subline = p => p.status === 'lost' ? 'Missing in ' + (p.location || 'unknown area')
+  : p.status === 'adoption' ? (p.breed || p.species) + ', for adoption'
+  : (p.breed || p.species) + (p.location ? ', ' + p.location : '');
+
+const SP_ICON = { Dog: '🐶', Cat: '🐱', Bird: '🦜', Rabbit: '🐰', Other: '🐾' };
+const ST_LABEL = { lost: 'Missing', adoption: 'For adoption', adopted: 'Adopted', owned: 'Registered' };
+
+function frameHTML(p, i) {
+  const ar = Math.max(.8, Math.min(1.9, p.ar || 1.25)), img = photoOf(p);
+  return `<button class="frame ${p.status}" style="--ar:${ar};--i:${Math.min(i, 24)}" data-id="${p.pet_id}">
+    <span class="print"><span class="shot">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : `<span style="display:grid;place-items:center;height:100%;font-size:3rem">${EMOJI[p.species] || '🐾'}</span>`}
+      <span class="chip sp-c">${SP_ICON[p.species] || '🐾'} ${esc(p.species)}</span><span class="chip st">${ST_LABEL[p.status] || p.status}</span>
+      <span class="on"><b>${esc(p.name)}</b><span class="no">${regNo(p)}</span></span></span>
+    <span class="cap">${esc(subline(p))}</span></span></button>`;
+}
+
+function apply() {
+  const q = f.q.trim().toLowerCase();
+  view = all.filter(p => (!f.species || p.species === f.species) && (!f.status || p.status === f.status) &&
+    (!q || [p.name, p.breed, p.location, p.color].join(' ').toLowerCase().includes(q)));
+  view.sort(f.sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : f.sort === 'age' ? (a, b) => (a.age ?? 99) - (b.age ?? 99) : (a, b) => a.pet_id - b.pet_id);
+  $('#sheet').innerHTML = view.map(frameHTML).join('');
+  $('#none').classList.toggle('hidden', view.length > 0);
+}
+
+function controls() {
+  const sp = ['Dog', 'Cat', 'Bird'].filter(s => all.some(p => p.species === s));
+  const seg = (el, items, key) => {
+    $(el).innerHTML = items.map(([v, l, c]) => `<button aria-pressed="${f[key] === v}" data-v="${v}">${l}<sup>${c}</sup></button>`).join('');
+    $$('button', $(el)).forEach(b => b.onclick = () => { f[key] = b.dataset.v; controls(); apply(); });
+  };
+  seg('#fSpecies', [['', 'All pets', all.length], ...sp.map(s => [s, SP_ICON[s] + ' ' + SP_LABEL[s], all.filter(p => p.species === s).length])], 'species');
+  seg('#fStatus', [['', 'Any status', all.length], ['lost', 'Missing', all.filter(p => p.status === 'lost').length], ['adoption', 'For adoption', all.filter(p => p.status === 'adoption').length]], 'status');
+}
+
+function intro() {
+  const lost = all.filter(p => p.status === 'lost'), adopt = all.filter(p => p.status === 'adoption').length, by = s => all.filter(p => p.species === s).length;
+  $('#intro').innerHTML = `<b>${all.length}</b> pets are on file${lost.length ? `, <b>${lost.length}</b> of them missing` : ''}. Browse the registry, spot a lost pet, or meet <b>${adopt}</b> who are looking for a home.`;
+  $('#stats').innerHTML = `<span>🐶 <b>${by('Dog')}</b> dogs</span><span>🐱 <b>${by('Cat')}</b> cats</span><span>🦜 <b>${by('Bird')}</b> parrots</span>` + (lost.length ? `<span class="red">🔴 <b>${lost.length}</b> missing</span>` : '');
+  const pick = [6, 1, 2, 41].map(id => all.find(p => p.pet_id === id)).filter(Boolean);
+  const pool = pick.length === 4 ? pick : all.slice(0, 4);
+  $('#collage').innerHTML = '<i class="dot d1"></i><i class="dot d2"></i>' + pool.map((p, i) => `<span class="c c${i + 1}"><img src="${esc(photoOf(p))}" alt=""></span>`).join('');
+  $('#miss').classList.toggle('hidden', !lost.length);
+  $('#missRow').innerHTML = lost.map(p => `<button class="mcard" data-id="${p.pet_id}"><img src="${esc(photoOf(p))}" alt=""><span><b>${esc(p.name)}</b><small>${esc(p.breed || p.species)}<br>Last seen in ${esc(p.location || 'an unknown area')}</small><i>View details →</i></span></button>`).join('');
+}
+
+/* ---------- dossier ---------- */
+const dlg = $('#dlg');
+function show(id) {
+  const p = all.find(x => x.pet_id == id); if (!p) return;
+  openId = p.pet_id;
+  $('#dImg').src = photoOf(p); $('#dImg').alt = p.name + ', ' + (p.breed || p.species);
+  const lost = p.status === 'lost';
+  $('#dBody').innerHTML = `<div><span class="id">${regNo(p)}</span><h2 id="dName">${esc(p.name)}</h2></div>
+    ${lost ? `<div class="alert">Missing in ${esc(p.location || 'an unknown area')}<span>If you have seen ${esc(p.name)}, send us a photo and where you saw it.</span></div>` : ''}
+    <dl><dt>Species</dt><dd>${esc(p.species)}</dd><dt>Breed</dt><dd>${esc(p.breed || 'Not given')}</dd><dt>Age</dt><dd>${p.age != null ? p.age + (p.age === 1 ? ' year' : ' years') : 'Not given'}</dd><dt>Sex</dt><dd>${esc(p.gender)}</dd><dt>Colour</dt><dd>${esc(p.color || 'Not given')}</dd><dt>City</dt><dd>${esc(p.location || 'Not given')}</dd></dl>
+    <p class="about">${esc(p.description || '')}</p>
+    <div class="acts">${lost ? `<a class="gbtn red" href="lost-found.html?tab=found&species=${p.species}">I have seen this pet</a>` : p.status === 'adoption' ? `<a class="gbtn" href="pet-details.html?id=${p.pet_id}#reqForm">Ask to adopt ${esc(p.name)}</a>` : ''}<a class="gbtn alt" href="pet-details.html?id=${p.pet_id}">Full profile</a></div>`;
+  if (!dlg.open) dlg.showModal();
+  history.replaceState(null, '', '#pet-' + p.pet_id);
+  const prefetch = i => { const q = view[i]; if (q) new Image().src = photoOf(q); };
+  const at = view.findIndex(x => x.pet_id === p.pet_id); prefetch(at - 1); prefetch(at + 1);
+}
+const step = d => { const at = view.findIndex(x => x.pet_id === openId); if (at < 0 || !view.length) return; show(view[(at + d + view.length) % view.length].pet_id); };
+$('#sheet').addEventListener('click', e => { const b = e.target.closest('.frame'); if (b) show(b.dataset.id); });
+$('#missRow').addEventListener('click', e => { const b = e.target.closest('.mcard'); if (b) show(b.dataset.id); });
+$('#dPrev').onclick = () => step(-1); $('#dNext').onclick = () => step(1); $('#dClose').onclick = () => dlg.close();
+dlg.addEventListener('close', () => { history.replaceState(null, '', location.pathname + location.search); const b = $(`.frame[data-id="${openId}"]`); if (b) b.focus({ preventScroll: true }); });
+dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+dlg.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); });
+
+/* ---------- filters ---------- */
+$('#q').oninput = e => { f.q = e.target.value; apply(); };
+$('#sort').onchange = e => { f.sort = e.target.value; apply(); };
+$('#clear').onclick = () => { f = { species: '', status: '', q: '', sort: f.sort }; $('#q').value = ''; controls(); apply(); };
+
+(async () => {
+  try {
+    const res = await api('/pets?limit=100');
+    all = res ? res.data.map(p => ({ ...p, ar: p.ar || 1.25 })) : Data.pets();
+  } catch (e) { toast(e.message, 'err'); }
+  intro(); controls(); apply();
+  const m = /^#pet-(\d+)/.exec(location.hash); if (m) show(+m[1]);
+})();
+</script>
+</body>
+</html>

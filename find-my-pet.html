@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Find My Pet – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="find">
+<div id="nav"></div>
+<div class="container">
+  <div class="page-head center" style="padding-top:50px"><span class="eyebrow">Biometric matching</span><h1 style="font-size:2.4rem;margin:8px 0">🔎 Find My Pet</h1><p class="muted" style="max-width:560px;margin:auto">Upload a clear photo of a lost or found pet. We compare its colours, markings and shape against every registered pet and show the closest photos.</p></div>
+
+  <div class="grid g2 mt mb" style="grid-template-columns:1fr 1fr;align-items:start">
+    <div class="card">
+      <h3 class="mb">1. Upload a photo</h3>
+      <div id="uploadArea">
+        <div class="dropzone" id="dz"><div class="dz-ico">📷</div><b>Click or drag &amp; drop a photo</b><p class="muted" style="font-size:.85rem">JPG or PNG – front-facing, good light</p></div>
+        <input type="file" id="file" accept="image/*" hidden>
+      </div>
+      <div class="previews" id="prev" style="grid-template-columns:1fr"></div>
+      <div class="field mt"><label for="species">Species (optional, narrows results)</label>
+        <select id="species"><option value="">Any</option><option>Dog</option><option>Cat</option><option>Bird</option></select></div>
+      <button class="btn btn-primary btn-block" id="go" disabled>🔍 Find matches</button>
+    </div>
+    <div class="card">
+      <h3 class="mb">📌 Tips for best results</h3>
+      <ul class="feat-list">
+        <li>📐 Take the photo straight on, at the pet's eye level</li>
+        <li>💡 Use bright natural light, avoid flash glare</li>
+        <li>🐾 Show the whole face and body, not just a close-up</li>
+        <li>🚫 Avoid blurry or heavily filtered images</li>
+      </ul>
+      <div id="analysis" class="hidden mt">
+        <div class="scan-box"><img id="scanImg" alt=""><div class="scan-line"></div></div>
+        <ul class="feat-list mt" id="steps">
+          <li>⏳ Reading the photo</li><li>⏳ Measuring colour, markings and shape</li><li>⏳ Comparing with registered pets</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div id="results" class="hidden mb">
+    <div class="flex between wrap mb"><h2>Match results</h2><span class="muted" id="resNote"></span></div>
+    <div class="grid" id="resList"></div>
+    <div class="empty hidden" id="none"><div class="em">🔍</div><p>No similar photo is on file yet.</p><a class="btn btn-primary mt" href="lost-found.html?tab=lost">Report a lost pet</a></div>
+  </div>
+</div>
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script src="ml-lite.js"></script>
+<script src="reports.js"></script>
+<script>
+const up = setupDropzone($('#dz'), $('#file'), $('#prev'), { multiple: false });
+$('#dz').addEventListener('change', () => { $('#go').disabled = !up.files().length; });
+
+$('#go').onclick = async () => {
+  const f = up.files()[0]; if (!f) return;
+  $('#analysis').classList.remove('hidden'); $('#results').classList.add('hidden');
+  $('#scanImg').src = URL.createObjectURL(f); $('#go').disabled = true;
+  const steps = $$('#steps li');
+  steps.forEach(s => { s.classList.remove('done'); s.textContent = s.textContent.replace('✅', '⏳'); });
+
+  // Real matching: PHP + Python service when the backend is on, otherwise ml-lite.js in this browser
+  const sp = $('#species').value; let matches = null, failure = '';
+  const pause = () => new Promise(r => setTimeout(r, 450));
+  try {
+    if (!CONFIG.USE_DEMO) {
+      const fd = new FormData(); fd.append('image', f); fd.append('species', sp);
+      matches = (await api('/find-pet', { method: 'POST', form: fd })).matches;
+    } else {
+      const vec = await ML.embed(f);
+      matches = (await ML.rank(vec, Data.pets(), { species: sp, limit: 5, minScore: 20 }));
+    }
+  } catch (err) { failure = (err.message === 'Failed to fetch' || /tainted|insecure/i.test(err.message)) ? ML.blockedMessage() : err.message; }
+  for (const s of steps) { await pause(); s.classList.add('done'); s.textContent = s.textContent.replace('⏳', '✅'); }
+  if (failure) { $('#go').disabled = false; $('#analysis').classList.add('hidden'); return toast(failure, 'err'); }
+  $('#results').classList.remove('hidden'); $('#go').disabled = false;
+  $('#resNote').textContent = matches.length ? matches.length + ' closest photo' + (matches.length > 1 ? 's' : '') : '';
+  $('#resList').innerHTML = matches.map((m, i) => {
+    const p = m.pet || Data.pet(m.pet_id); if (!p) return '';
+    const lvl = verdict(m.score);
+    return `<div class="card match-card ${i === 0 && m.score >= THRESH.strong ? 'best' : ''}">
+      <div class="pet-thumb" style="background:${grad(p.pet_id)}">${thumbHTML(p)}</div>
+      <div><div class="flex wrap"><h3>${esc(p.name)}</h3><span class="badge ${lvl[1]}">${lvl[0]}</span></div>
+        <p class="muted" style="font-size:.88rem">${esc(p.breed)} • ${p.age} yrs • 📍 ${esc(p.location || '-')}</p>
+        <div class="score-bar"><i style="width:${m.score}%"></i></div><small class="muted">Similarity score: <b>${m.score}%</b></small></div>
+      <div class="flex" style="flex-direction:column;align-items:stretch"><a class="btn btn-primary btn-sm" href="pet-details.html?id=${p.pet_id}">View pet</a>
+        ${p.status === 'lost' ? `<a class="btn btn-ghost btn-sm" href="lost-found.html?tab=found&species=${p.species}">I found this pet</a>` : ''}</div></div>`;
+  }).join('');
+  $('#none').classList.toggle('hidden', matches.length > 0);
+  $('#results').scrollIntoView({ behavior: 'smooth' });
+};
+</script>
+</body>
+</html>

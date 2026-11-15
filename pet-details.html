@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pet Details – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="adoption">
+<div id="nav"></div>
+<div class="container">
+  <div class="page-head"><a href="adoption.html" class="muted">← Back to adoption</a></div>
+  <div class="detail" id="detail"></div>
+  <div id="similar-wrap" class="mb"><h2 class="mb">More pets you may like</h2><div class="grid g4" id="similar"></div></div>
+</div>
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get('id') || 1;
+(async () => {
+  const res = await api('/pets/' + id);
+  const p = (res && res.data) || Data.pet(id);
+  if (!p) { $('#detail').innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="em">😿</div><p>Pet not found.</p><a href="adoption.html" class="btn btn-primary mt">Browse pets</a></div>'; $('#similar-wrap').remove(); return; }
+  document.title = p.name + ' – Pet Biometrics';
+  const u = getUser(), mine = u && (p.owner_id == 1 || p.owner_id == u.user_id);
+  const imgs = petImgs(p), gs = [grad(p.pet_id), grad(p.pet_id + 1), grad(p.pet_id + 2), grad(p.pet_id + 3)];
+  const inner = i => imgs.length ? `<img src="${esc(imgs[i])}" alt="${esc(p.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">` : EMOJI[p.species];
+  $('#detail').innerHTML = `
+  <div><div class="gallery-main" id="gm" style="background:${gs[0]};overflow:hidden">${inner(0)}</div>
+    <div class="thumbs" style="flex-wrap:wrap">${(imgs.length ? imgs : gs).map((g, i) => `<div class="${i ? '' : 'on'}" style="background:${gs[i % 4]};overflow:hidden" data-i="${i}">${imgs.length ? `<img src="${esc(imgs[i])}" alt="" style="width:100%;height:100%;object-fit:cover">` : EMOJI[p.species]}</div>`).join('')}</div></div>
+  <div>
+    <div class="flex between wrap"><h1 style="font-size:2.2rem">${esc(p.name)}</h1>${statusBadge(p.status)}</div>
+    <p class="muted">${esc(p.breed)} • ${esc(p.species)} • 📍 ${esc(p.location || 'Unknown')}</p>
+    <div class="info-grid">
+      <div><small>Age</small><b>${p.age} year${p.age > 1 ? 's' : ''}</b></div><div><small>Gender</small><b>${esc(p.gender)}</b></div>
+      <div><small>Color</small><b>${esc(p.color)}</b></div><div><small>Vaccinated</small><b>${Data.vaccinated(p.pet_id) === 'Yes' ? 'Yes ✅' : 'No record'}</b></div>
+    </div>
+    <h3>About ${esc(p.name)}</h3><p class="muted mb">${esc(p.description)}</p>
+    ${mine ? `<a href="pet-form.html?id=${p.pet_id}" class="btn btn-ghost btn-block">✏️ Edit pet</a>` :
+    p.status === 'adoption' ? `<div class="card" style="background:#f0fdfa;border-color:#99f6e4">
+      <h3 class="mb">💌 Send adoption request</h3>
+      <form id="reqForm">
+        <div class="field"><label for="f1-phone">Your phone</label><input id="f1-phone" name="phone" placeholder="01XXXXXXXXX" required></div>
+        <div class="field"><label for="f2-message">Message to the owner</label><textarea id="f2-message" name="message" required placeholder="Tell the owner about your home, family and experience with pets..."></textarea></div>
+        <label class="flex" style="font-size:.85rem;margin-bottom:16px;cursor:pointer"><input type="checkbox" required style="width:auto"> I promise to give ${esc(p.name)} a safe and loving home.</label>
+        <button class="btn btn-accent btn-block">Send request</button>
+      </form></div>` : `<div class="card"><p class="muted">This pet is not currently available for adoption.</p></div>`}
+  </div>`;
+  $$('.thumbs div').forEach(t => t.onclick = () => { $$('.thumbs div').forEach(x => x.classList.remove('on')); t.classList.add('on'); if (imgs.length) $('#gm').innerHTML = inner(+t.dataset.i); });
+  const form = $('#reqForm');
+  if (form) form.onsubmit = async e => {
+    e.preventDefault();
+    if (!getUser()) { toast('Please login to send a request', 'err'); return setTimeout(() => requireLogin(), 900); }
+    try {
+      const f = Object.fromEntries(new FormData(form)), me = getUser();
+      if (CONFIG.USE_DEMO) {                       // demo mode: keep the request in the browser and tell the admin
+        const all = Data.requests();
+        if (all.some(r => r.pet_id == p.pet_id && r.requester_id == me.user_id && r.status === 'pending')) throw new Error('You already sent a request for this pet.');
+        const r = { request_id: Math.max(0, ...all.map(x => x.request_id)) + 1, pet: p.name, pet_id: p.pet_id, requester: me.name, requester_id: me.user_id, phone: f.phone, message: f.message, status: 'pending', date: todayISO() };
+        Data.saveRequests([r, ...all]);
+        Data.addNotif({ to: 'admin', type: 'adoption', ref_id: r.request_id, message: `New adoption request #${r.request_id}: ${me.name} wants to adopt ${p.name}.` });
+        Data.addNotif({ to: 'user', type: 'adoption', message: `Your adoption request for ${p.name} was sent. The admin will review it.` });
+      } else await api('/adoption/request', { method: 'POST', body: { pet_id: p.pet_id, ...f } });
+      form.innerHTML = '<div class="empty"><div class="em">🎉</div><b>Request sent!</b><p>The admin will review your message and contact you soon.</p></div>';
+      toast('Adoption request sent!', 'ok');
+    } catch (err) { toast(err.message, 'err'); }
+  };
+  $('#similar').innerHTML = Data.pets().filter(x => x.pet_id != p.pet_id && x.status === 'adoption').slice(0, 4).map(petCard).join('');
+})();
+</script>
+</body>
+</html>

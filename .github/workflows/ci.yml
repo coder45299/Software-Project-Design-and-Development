@@ -1,0 +1,62 @@
+name: CI
+
+# Runs on every push and every pull request, for every branch.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1" --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      PETBIO_DB_HOST: 127.0.0.1
+      PETBIO_DB_USER: root
+      PETBIO_DB_PASS: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Locate the project folder (works whether the app is at the repo root or in a sub-folder)
+        run: |
+          f=$(find . -path ./node_modules -prune -o -name pet_biometrics.sql -path '*/db/*' -print | head -1)
+          [ -n "$f" ] || { echo "db/pet_biometrics.sql not found"; exit 1; }
+          dir=$(dirname "$(dirname "$f")"); echo "PROJECT_DIR=$dir" >> "$GITHUB_ENV"; echo "Project folder: $dir"
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: "8.3", extensions: "pdo_mysql, mbstring, fileinfo, gd" }
+
+      - name: Install dependencies
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          pip install -r ml/requirements.txt pytest requests coverage
+
+      - name: Import the database schema and seed data
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: mysql -h 127.0.0.1 -u root < db/pet_biometrics.sql
+
+      - name: Lint + unit + API/ML + browser + accessibility tests, with coverage thresholds (JS >= 85%, Python >= 85%)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: bash tests/run-all.sh
+
+      - name: Upload test reports and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: ${{ env.PROJECT_DIR }}/tests/reports/
+          if-no-files-found: warn

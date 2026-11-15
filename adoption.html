@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Adopt a Pet – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-page="adoption">
+<div id="nav"></div>
+<div class="container">
+  <div class="page-head flex between wrap">
+    <div><h1>🏠 Find a friend to adopt</h1><p class="muted">Every pet here is waiting for a loving home.</p></div>
+    <button class="btn btn-accent" onclick="postPet()">➕ Post a pet for adoption</button>
+  </div>
+
+  <div class="card filters">
+    <div class="field"><label for="q">Search</label><input id="q" placeholder="Name or breed..."></div>
+    <div class="field"><label for="fSpecies">Species</label><select id="fSpecies"><option value="">All</option><option>Dog</option><option>Cat</option><option>Bird</option><option>Other</option></select></div>
+    <div class="field"><label for="fGender">Gender</label><select id="fGender"><option value="">Any</option><option>Male</option><option>Female</option></select></div>
+    <div class="field"><label for="fAge">Age</label><select id="fAge"><option value="">Any</option><option value="0-1">Up to 1 yr</option><option value="1-3">1 – 3 yrs</option><option value="3-99">3+ yrs</option></select></div>
+    <div class="field"><label for="fLoc">Location</label><select id="fLoc"><option value="">All</option></select></div>
+    <button class="btn btn-ghost" id="reset">Reset</button>
+  </div>
+
+  <p class="muted mb"><b id="count">0</b> pets found</p>
+  <div class="grid g4 mb" id="list"></div>
+</div>
+
+<div class="modal-bg" id="postModal"><div class="modal">
+  <div class="flex between mb"><h3>Post a pet for adoption</h3><button class="btn btn-ghost btn-sm" onclick="closeModal('postModal')">✕</button></div>
+  <form id="postForm">
+    <div class="field"><label for="myPetSel">Choose your pet</label><select name="pet_id" id="myPetSel"></select></div>
+    <div class="field"><label for="f2-location">Location</label><input id="f2-location" name="location" placeholder="City / area" required></div>
+    <div class="field"><label for="f3-note">Why are you rehoming?</label><textarea id="f3-note" name="note" placeholder="Tell adopters about the pet and your reason..."></textarea></div>
+    <button class="btn btn-primary btn-block">Publish post</button>
+  </form>
+</div></div>
+
+<div id="footer"></div>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script>
+let all = [];
+(async () => {
+  const res = await api('/adoption');
+  all = (res && res.data) || Data.pets().filter(p => p.status === 'adoption');
+  $('#fLoc').innerHTML += [...new Set(all.map(p => p.location))].map(l => `<option>${esc(l)}</option>`).join('');
+  render();
+})();
+function render() {
+  const q = $('#q').value.toLowerCase(), s = $('#fSpecies').value, g = $('#fGender').value, a = $('#fAge').value, l = $('#fLoc').value;
+  const out = all.filter(p => (!q || (p.name + p.breed).toLowerCase().includes(q)) && (!s || p.species === s) && (!g || p.gender === g) && (!l || p.location === l) &&
+    (!a || (p.age >= +a.split('-')[0] && p.age <= +a.split('-')[1])));
+  $('#count').textContent = out.length;
+  $('#list').innerHTML = out.map(petCard).join('') || '<div class="empty" style="grid-column:1/-1"><div class="em">🔍</div><p>No pets match your filters.</p></div>';
+}
+['q', 'fSpecies', 'fGender', 'fAge', 'fLoc'].forEach(id => $('#' + id).addEventListener('input', render));
+$('#reset').onclick = () => { ['q', 'fSpecies', 'fGender', 'fAge', 'fLoc'].forEach(id => $('#' + id).value = ''); render(); };
+
+function postPet() {
+  if (!requireLogin()) return;
+  const mine = Data.pets().filter(p => (p.owner_id == 1 || p.owner_id == getUser().user_id) && p.status !== 'adoption');
+  if (!mine.length) return toast('You have no pets available to post. Add a pet first.', 'err');
+  $('#myPetSel').innerHTML = mine.map(p => `<option value="${p.pet_id}">${esc(p.name)} (${p.species})</option>`).join('');
+  openModal('postModal');
+}
+$('#postForm').onsubmit = async e => {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(e.target));
+  try {
+    await api('/adoption', { method: 'POST', body: f });
+    const pets = Data.pets(), p = pets.find(x => x.pet_id == f.pet_id); p.status = 'adoption'; p.location = f.location; Data.savePets(pets);
+    all = Data.pets().filter(p => p.status === 'adoption'); render(); closeModal('postModal'); toast('Adoption post published!', 'ok');
+  } catch (err) { toast(err.message, 'err'); }
+};
+</script>
+</body>
+</html>

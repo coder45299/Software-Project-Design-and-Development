@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin sign in – Pet Biometrics</title>
+<link rel="stylesheet" href="style.css">
+<style>
+ body.adm{background:#0b1720;color:#e6eef3;min-height:100vh;display:grid;place-items:center;padding:24px}
+ .adm-card{width:min(440px,100%);background:#11222d;border:1px solid #1f3444;border-radius:22px;padding:38px 34px;box-shadow:0 30px 80px -30px #000}
+ .adm-card .logo{display:inline-flex;margin-bottom:22px;color:#fff}.adm-card .logo b{color:#fb923c}
+ .adm-card h1{font-size:1.7rem;margin-bottom:6px;color:#fff}
+ .adm-card p.muted{color:#8fa6b4}
+ .adm-card label{color:#b8c9d3}
+ .adm-card input{background:#0b1720;border:1.5px solid #27404f;color:#fff}
+ .adm-card input:focus{border-color:#fb923c;outline:none;box-shadow:0 0 0 3px #fb923c33}
+ .adm-card .btn-primary{background:#fb923c;border-color:#fb923c;color:#0b1720;font-weight:700}
+ .adm-note{margin-top:18px;padding:12px 14px;border-radius:12px;background:#0b1720;border:1px dashed #27404f;font-size:.84rem;color:#8fa6b4}
+ .adm-note b{color:#fdba74}
+ .adm-back{display:block;text-align:center;margin-top:18px;color:#8fa6b4;font-size:.88rem}
+ .adm-feat{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 22px}.adm-feat span{font-size:.76rem;background:#17303f;color:#c7d6df;padding:5px 10px;border-radius:99px}
+</style>
+</head>
+<body class="adm" data-page="admin-login">
+<main class="adm-card">
+  <a href="index.html" class="logo"><i>🐾</i><span>Pet<b>Bio</b>metrics</span></a>
+  <h1>Admin sign in</h1>
+  <p class="muted">Staff only. Review lost &amp; found reports and match pet photos.</p>
+  <div class="adm-feat"><span>📥 Reports inbox</span><span>⬇ Download photos</span><span>🔎 ML photo match</span></div>
+  <form id="f" novalidate>
+    <div class="field"><label for="em">Admin email</label><input id="em" type="email" name="email" autocomplete="username" required></div>
+    <div class="field"><label for="pw">Password</label><input id="pw" type="password" name="password" autocomplete="current-password" required></div>
+    <button class="btn btn-primary btn-block" id="go">Sign in to admin panel</button>
+  </form>
+  <p class="adm-note" id="demoNote">Demo mode: sign in with <b>admin@petbio.com</b> / <b>admin123</b></p>
+  <a class="adm-back" href="register.html?tab=login">← I am a pet owner (user login)</a>
+</main>
+<script src="photos.js"></script>
+<script src="app.js"></script>
+<script>
+if (!CONFIG.USE_DEMO) $('#demoNote').classList.add('hidden');
+if (isAdmin()) location.replace('admin.html');
+$('#f').onsubmit = async e => {
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(e.target)), btn = $('#go'); btn.disabled = true;
+  try {
+    const res = await api('/auth/login', { method: 'POST', body: f });
+    let user;
+    if (res) user = res.user;
+    else {
+      try { user = demoAuth.login(f.email, f.password); } catch (e) { throw new Error('Wrong admin email or password.'); }
+    }
+    if (user.role !== 'admin') { await api('/auth/logout', { method: 'POST' }).catch(() => {}); throw new Error('This account is not an admin.'); }
+    setUser(user); toast('Welcome back', 'ok'); setTimeout(() => location.href = 'admin.html', 500);
+  } catch (err) { toast(err.message, 'err'); btn.disabled = false; }
+};
+</script>
+</body>
+</html>
